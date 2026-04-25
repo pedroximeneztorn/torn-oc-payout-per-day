@@ -281,6 +281,38 @@
         }
     }
 
+    // --- Time-until-execution parsing ---
+    // Each active OC card has an element whose aria-label is a structured
+    // time string like "2 days 22 hours 6 minutes 55 seconds". That's the
+    // queue countdown — assuming every remaining slot consumes its full 24h
+    // planning window, that's roughly when this OC will pay out. Per-slot
+    // caps render as "24 hours" (no minutes/seconds), which we exclude so we
+    // don't confuse them with the queue timer.
+    function parseRemainingDays(crimeEl) {
+        for (const el of crimeEl.querySelectorAll('[aria-label]')) {
+            const lbl = (el.getAttribute('aria-label') || '').trim();
+            const m = lbl.match(/^(?:(\d+)\s*days?\s*)?(?:(\d+)\s*hours?\s*)?(?:(\d+)\s*minutes?\s*)?(?:(\d+)\s*seconds?\s*)?$/i);
+            if (!m) continue;
+            const d = Number(m[1] || 0);
+            const h = Number(m[2] || 0);
+            const mi = Number(m[3] || 0);
+            const s = Number(m[4] || 0);
+            // Per-slot 24h caps don't include minutes/seconds; require finer
+            // granularity to be confident this is the queue timer.
+            if (mi === 0 && s === 0) continue;
+            const days = d + h / 24 + mi / 1440 + s / 86400;
+            if (days > 0) return days;
+        }
+        return null;
+    }
+
+    function formatRemaining(days) {
+        if (days >= 1) return `${days.toFixed(1)}d`;
+        const hours = days * 24;
+        if (hours >= 1) return `${hours.toFixed(1)}h`;
+        return `${Math.round(hours * 60)}m`;
+    }
+
     // --- Stats rendering ---
     let loggedDraw = false;
     function drawStats() {
@@ -330,11 +362,21 @@
             const min = calc(low);
             const max = calc(high);
             const avg = (min + max) / 2;
-            const daily = avg / config.days;
+
+            // Prefer the actual queue countdown so DAILY reflects what you'll
+            // earn per remaining day. Falls back to the nominal scenario
+            // length when the card has no live timer (e.g. still recruiting).
+            const remainingDays = parseRemainingDays(crime);
+            const usingRemaining = remainingDays != null && remainingDays > 0;
+            const daysForRate = usingRemaining ? remainingDays : config.days;
+            const daily = avg / daysForRate;
+            const dailyLabel = usingRemaining
+                ? `DAILY (${formatRemaining(remainingDays)} left)`
+                : `DAILY (${config.days}d nominal)`;
 
             const box = document.createElement('div');
             box.className = 'ev-display-final';
-            box.setAttribute('style', 'position:absolute; top:8px; right:45px; background:#000 !important; border:2px solid #37bcd6 !important; padding:10px; width:180px; z-index:99999; border-radius:4px; box-shadow: 0 0 15px #000;');
+            box.setAttribute('style', 'position:absolute; top:8px; right:45px; background:#000 !important; border:2px solid #37bcd6 !important; padding:10px; width:200px; z-index:99999; border-radius:4px; box-shadow: 0 0 15px #000;');
             box.innerHTML = `
                 <div style="${fText('#37bcd6', '10px')} border-bottom:1px solid #333; margin-bottom:6px; text-align:center;">EST. SHARE (${Math.round(factionRate * 100)}%)</div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
@@ -350,7 +392,7 @@
                     <span style="${fText('#00ff00', '13px')}">$${Math.floor(avg).toLocaleString()}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between;">
-                    <span style="${fText('#ffb300', '12px')}">DAILY:</span>
+                    <span style="${fText('#ffb300', '11px')}">${dailyLabel}:</span>
                     <span style="${fText('#ffb300', '13px')}">$${Math.floor(daily).toLocaleString()}</span>
                 </div>
             `;
