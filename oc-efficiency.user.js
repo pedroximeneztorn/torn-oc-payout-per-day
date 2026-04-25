@@ -5,7 +5,7 @@
 // @description  Estimates min/max/avg/daily payout per slot for OC 2.0 crimes, with a 24h API price cache.
 // @author       rem4rk
 // @license      MIT
-// @match        https://*.torn.com/factions.php?step=your*
+// @match        https://*.torn.com/factions.php*
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
@@ -88,23 +88,32 @@
     }
 
     // --- CSS module class detection ---
-    // Generic prefixes like "wrapper" / "panel" can collide with unrelated React
-    // components, so we (a) check hashed (CSS-module) selectors first and only
-    // fall back to plain class names, and (b) skip the global cache so a wrong
-    // first match can't poison the rest of the session.
+    // Generic prefixes like "wrapper" / "panel" can collide with unrelated
+    // React components. We (a) check hashed (CSS-module) selectors first,
+    // (b) anchor matches on real class-token boundaries (otherwise a class
+    // like `crimeWrapper___xxx` would falsely match prefix `wrapper`), and
+    // (c) skip a global cache so a wrong first match can't poison the
+    // session.
     function findClass(prefix) {
-        const el = document.querySelector(`[class*="${prefix}___"]`);
-        if (el) {
-            const match = el.className.match(new RegExp(`${prefix}___\\w+`));
-            if (match) return match[0];
+        // [class*=...] matches substrings, so we still verify each candidate
+        // by splitting className into actual tokens.
+        const candidates = document.querySelectorAll(`[class*="${prefix}___"]`);
+        for (const el of candidates) {
+            const cn = typeof el.className === 'string'
+                ? el.className
+                : (el.className?.baseVal || '');
+            const hit = cn.split(/\s+/).find(t => t.startsWith(`${prefix}___`));
+            if (hit) return hit;
         }
 
         for (const sheet of document.styleSheets) {
             try {
                 for (const rule of sheet.cssRules || []) {
-                    if (rule.selectorText && rule.selectorText.includes(`${prefix}___`)) {
-                        const m = rule.selectorText.match(new RegExp(`${prefix}___\\w+`));
-                        if (m) return m[0];
+                    if (rule.selectorText) {
+                        // Require a `.` before the prefix so we don't match
+                        // mid-token (e.g. `.crimeWrapper___xxx`).
+                        const m = rule.selectorText.match(new RegExp(`\\.(${prefix}___\\w+)`));
+                        if (m) return m[1];
                     }
                 }
             } catch (e) {
@@ -220,15 +229,22 @@
     function injectControlPanel() {
         if (document.getElementById('oc-persistent-panel')) return;
 
+        const noticeHtml = settings.apiKey ? '' : `
+            <div style="${fText('#ffb300', '10px', 'normal')} background:#1a1208 !important; border:1px solid #5a3a00 !important; padding:6px; margin-bottom:8px; line-height:1.35;">
+                Add a Torn API key to fetch market prices for item-reward crimes (Stage Fright, Crane Reaction, Gone Fission). Cash-reward crimes work without one.
+            </div>
+        `;
+
         const panel = document.createElement('div');
         panel.id = 'oc-persistent-panel';
-        panel.setAttribute('style', 'position:fixed; bottom:20px; left:20px; z-index:999999; background:#000 !important; border:2px solid #37bcd6 !important; padding:12px; width:190px; box-shadow: 5px 5px 20px #000;');
+        panel.setAttribute('style', 'position:fixed; bottom:20px; left:20px; z-index:999999; background:#000 !important; border:2px solid #37bcd6 !important; padding:12px; width:220px; box-shadow: 5px 5px 20px #000;');
         panel.innerHTML = `
             <div style="${fText('#37bcd6', '11px')} border-bottom:1px solid #37bcd6; margin-bottom:8px;">OC EFFICIENCY</div>
+            ${noticeHtml}
             <div style="${fText('#fff', '12px')} margin-bottom:10px;">CURRENT CUT: <span id="oc-cut-display" style="color:#0f0 !important;">${settings.factionPayout}%</span></div>
             <button id="oc-btn-payout" style="width:100%; background:#222; color:#fff; border:1px solid #444; padding:5px; margin-bottom:5px; cursor:pointer;">Adjust Payout %</button>
             <button id="oc-btn-sync" style="width:100%; background:#222; color:#fff; border:1px solid #444; padding:5px; margin-bottom:5px; cursor:pointer;">Force Market Sync</button>
-            <button id="oc-btn-api" style="width:100%; background:#222; color:#fff; border:1px solid #444; padding:5px; cursor:pointer;">Update API Key</button>
+            <button id="oc-btn-api" style="width:100%; background:#222; color:#fff; border:1px solid #444; padding:5px; cursor:pointer;">${settings.apiKey ? 'Update API Key' : 'Set API Key'}</button>
         `;
         document.body.appendChild(panel);
 
@@ -250,56 +266,49 @@
     }
 
     function promptApiKey() {
-        const v = prompt('Enter API Key:', settings.apiKey);
+        const v = prompt(
+            'Enter your Torn API key.\n\nNeeded to fetch market prices for item-reward crimes (Stage Fright, Crane Reaction, Gone Fission). Cash-reward crimes work without one.',
+            settings.apiKey,
+        );
         if (v == null) return;
         const trimmed = v.trim();
         if (trimmed) {
             saveSettings({ apiKey: trimmed });
+            // Re-inject so the notice and button label update.
+            document.getElementById('oc-persistent-panel')?.remove();
             syncMarketPrices(true);
+            scheduleUpdate(true);
         }
     }
 
-    function showApiKeyModal() {
-        if (document.getElementById('oc-api-modal')) return;
-        const modal = document.createElement('div');
-        modal.id = 'oc-api-modal';
-        modal.setAttribute('style', 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:2000000; display:flex; align-items:center; justify-content:center;');
-        modal.innerHTML = `<div style="background:#111; padding:30px; border:2px solid #37bcd6; text-align:center;">
-            <h2 style="${fText('#37bcd6', '18px')}">API KEY REQUIRED</h2>
-            <input type="text" id="oc-api-input" style="width:250px; padding:10px; margin:20px 0; background:#000; color:#fff; border:1px solid #444;">
-            <br><button id="oc-api-save" style="background:#37bcd6; color:#000; padding:10px 30px; font-weight:bold; cursor:pointer;">SAVE & START</button>
-        </div>`;
-        document.body.appendChild(modal);
-        document.getElementById('oc-api-save').onclick = () => {
-            const val = document.getElementById('oc-api-input').value.trim();
-            if (val) {
-                saveSettings({ apiKey: val });
-                modal.remove();
-                syncMarketPrices(true);
-            }
-        };
-    }
-
     // --- Stats rendering ---
+    let loggedDraw = false;
     function drawStats() {
-        // The class prefixes here ('wrapper', 'panel', 'panelTitle') are
-        // generic enough that findClass() can match unrelated React components
-        // elsewhere on the page. We don't scope the lookup to a known crimes
-        // container yet (don't have a stable selector for one), but the
-        // OC_DATA_BY_TITLE check below acts as an implicit verifier: a wrong
-        // wrapper class still produces no draws, since unrelated panels won't
-        // have a recognized OC title. TODO: scope this to the crimes container
-        // once we have a reliable anchor.
-        const wrapperClass = findClass('wrapper');
+        // OC cards are identified by a unique [data-oc-id] attribute on the
+        // outer wrapper — far more reliable than guessing among the multiple
+        // `wrapper___xxx` CSS-module classes Torn uses on this page.
         const titleClass = findClass('panelTitle');
         const panelClass = findClass('panel');
         const successClass = findClass('successChance');
-        if (!wrapperClass || !titleClass || !panelClass) return;
+
+        const cards = document.querySelectorAll('[data-oc-id]');
+
+        if (!loggedDraw && cards.length > 0) {
+            loggedDraw = true;
+            const titles = Array.from(cards).map(c =>
+                titleClass ? c.querySelector(`.${titleClass}`)?.innerText : null
+            );
+            const matched = titles.filter(t => OC_DATA_BY_TITLE[normalizeTitle(t)]).length;
+            console.log(`[OC] drawStats: ${cards.length} cards, ${matched} matched OC_DATA. classes:`, { titleClass, panelClass, successClass });
+            console.log('[OC] titles:', titles);
+        }
+
+        if (!titleClass || !panelClass) return;
 
         const factionRate = settings.factionPayout / 100;
         const market = settings.marketCache;
 
-        document.querySelectorAll(`.${wrapperClass}`).forEach(crime => {
+        cards.forEach(crime => {
             const title = crime.querySelector(`.${titleClass}`)?.innerText;
             const config = OC_DATA_BY_TITLE[normalizeTitle(title)];
             const target = crime.querySelector(`.${panelClass}`);
@@ -377,29 +386,31 @@
 
     function removeOcUi() {
         document.getElementById('oc-persistent-panel')?.remove();
-        document.getElementById('oc-api-modal')?.remove();
         document.querySelectorAll('.ev-display-final').forEach(el => el.remove());
     }
 
+    let loggedGate = false;
     function doUpdate() {
         if (isUpdating) return;
         isUpdating = true;
         try {
+            const onYourFaction = window.location.search.includes('step=your');
             const onCrimesTab = window.location.hash.includes('tab=crimes');
-            if (!onCrimesTab) {
-                // SPA navigation away from the crimes tab — tear down our UI
-                // so panels and modals don't bleed onto unrelated faction tabs.
+            if (!loggedGate) {
+                loggedGate = true;
+                console.log(`[OC] gate: step=your=${onYourFaction}, tab=crimes=${onCrimesTab}, hash="${window.location.hash}"`);
+            }
+            if (!onYourFaction || !onCrimesTab) {
+                // Wrong page (different faction subtab or different faction-page
+                // step) — tear down so the panel doesn't bleed across tabs.
                 removeOcUi();
                 return;
             }
-            if (!settings.apiKey) {
-                showApiKeyModal();
-                return;
-            }
-            // Sync only when the user is actually on the crimes tab — there's
-            // no point fetching prices while they're on Members/War/etc.
-            // syncMarketPrices() is a no-op if the cache is still fresh.
-            syncMarketPrices();
+            // Cash-reward crimes still work without an API key; only the
+            // item-reward ones (Stage Fright, Crane Reaction, Gone Fission)
+            // need market prices. The panel itself explains this when no key
+            // is set, so we render unconditionally.
+            if (settings.apiKey) syncMarketPrices();
             injectControlPanel();
             drawStats();
         } finally {
