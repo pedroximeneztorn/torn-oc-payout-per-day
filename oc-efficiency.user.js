@@ -322,6 +322,7 @@
         const titleClass = findClass('panelTitle');
         const panelClass = findClass('panel');
         const successClass = findClass('successChance');
+        const joinButtonClass = findClass('joinButton');
 
         const cards = document.querySelectorAll('[data-oc-id]');
 
@@ -331,7 +332,7 @@
                 titleClass ? c.querySelector(`.${titleClass}`)?.innerText : null
             );
             const matched = titles.filter(t => OC_DATA_BY_TITLE[normalizeTitle(t)]).length;
-            console.log(`[OC] drawStats: ${cards.length} cards, ${matched} matched OC_DATA. classes:`, { titleClass, panelClass, successClass });
+            console.log(`[OC] drawStats: ${cards.length} cards, ${matched} matched OC_DATA. classes:`, { titleClass, panelClass, successClass, joinButtonClass });
             console.log('[OC] titles:', titles);
         }
 
@@ -345,6 +346,11 @@
             const config = OC_DATA_BY_TITLE[normalizeTitle(title)];
             const target = crime.querySelector(`.${panelClass}`);
             if (!config || !target || crime.querySelector('.ev-display-final')) return;
+
+            // Hide the box once the OC is full — there's no decision left to
+            // make. We use the presence of any Join button (enabled or not)
+            // as the signal that at least one slot is still open.
+            if (!joinButtonClass || !crime.querySelector(`.${joinButtonClass}`)) return;
 
             let [low, high] = config.payout || [0, 0];
             if (config.items) {
