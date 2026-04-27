@@ -450,29 +450,54 @@
                 ? `DAILY (${formatRemaining(remainingDays)} left)`
                 : `DAILY (${config.days}d nominal)`;
 
-            const box = document.createElement('div');
-            box.className = 'ev-display-final';
-            box.setAttribute('style', 'position:absolute; top:8px; right:45px; background:#000 !important; border:2px solid #37bcd6 !important; padding:10px; width:200px; z-index:99999; border-radius:4px; box-shadow: 0 0 15px #000;');
-            box.innerHTML = `
-                <div style="${fText('#37bcd6', '10px')} border-bottom:1px solid #333; margin-bottom:6px; text-align:center;">EST. SHARE (${Math.round(factionRate * 100)}%)</div>
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="${fText('#ccc', '11px', 'normal')}">MIN:</span>
-                    <span style="${fText('#ffffff', '12px')}">$${Math.floor(min).toLocaleString()}</span>
+            const chainSummary = chainNames.length > 1
+                ? `${chainNames.join(' → ')} (${pool}-way pool)`
+                : `${pool}-way`;
+
+            const row = document.createElement('div');
+            row.className = 'ev-display-final';
+            row.setAttribute('style', 'background:#000 !important; border:1px solid #37bcd6 !important; margin:4px 8px; padding:6px 10px; border-radius:3px;');
+            row.innerHTML = `
+                <div class="ev-summary" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                    <span style="${fText('#37bcd6', '11px')}">${dailyLabel}</span>
+                    <span style="display:flex; align-items:center; gap:8px;">
+                        <span style="${fText('#ffb300', '13px')}">$${Math.floor(daily).toLocaleString()}</span>
+                        <button type="button" class="ev-toggle" style="background:#111; color:#37bcd6; border:1px solid #37bcd6; width:18px; height:18px; line-height:1; border-radius:50%; cursor:pointer; padding:0; font-family: 'Courier New', monospace; font-weight:bold; font-size:11px;">?</button>
+                    </span>
                 </div>
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="${fText('#ccc', '11px', 'normal')}">MAX:</span>
-                    <span style="${fText('#ffffff', '12px')}">$${Math.floor(max).toLocaleString()}</span>
-                </div>
-                <div style="display:flex; justify-content:space-between; border-top:1px solid #444; padding-top:5px; margin-bottom:2px;">
-                    <span style="${fText('#00ff00', '12px')}">AVG:</span>
-                    <span style="${fText('#00ff00', '13px')}">$${Math.floor(avg).toLocaleString()}</span>
-                </div>
-                <div style="display:flex; justify-content:space-between;">
-                    <span style="${fText('#ffb300', '11px')}">${dailyLabel}:</span>
-                    <span style="${fText('#ffb300', '13px')}">$${Math.floor(daily).toLocaleString()}</span>
+                <div class="ev-details" style="display:none; border-top:1px solid #333; margin-top:6px; padding-top:6px;">
+                    <div style="${fText('#37bcd6', '10px')} margin-bottom:4px;">EST. SHARE (${Math.round(factionRate * 100)}% faction cut · ${chainSummary} · ${(successFactor * 100).toFixed(1)}% success)</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <span style="${fText('#ccc', '11px', 'normal')}">MIN:</span>
+                        <span style="${fText('#ffffff', '12px')}">$${Math.floor(min).toLocaleString()}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <span style="${fText('#ccc', '11px', 'normal')}">MAX:</span>
+                        <span style="${fText('#ffffff', '12px')}">$${Math.floor(max).toLocaleString()}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="${fText('#00ff00', '11px')}">AVG:</span>
+                        <span style="${fText('#00ff00', '12px')}">$${Math.floor(avg).toLocaleString()}</span>
+                    </div>
                 </div>
             `;
-            target.appendChild(box);
+
+            const details = row.querySelector('.ev-details');
+            row.querySelector('.ev-toggle').addEventListener('click', () => {
+                details.style.display = details.style.display === 'none' ? 'block' : 'none';
+            });
+
+            // Insert above the slots row. The slots area is a sibling of the
+            // scenario header inside the OC card's contentLayer, so we anchor
+            // off the scenario element. Fall back to appending into the panel
+            // if the structure ever changes.
+            const scenarioClass = findClass('scenario');
+            const scenarioEl = scenarioClass ? crime.querySelector(`.${scenarioClass}`) : null;
+            if (scenarioEl?.parentElement) {
+                scenarioEl.parentElement.insertBefore(row, scenarioEl.nextElementSibling);
+            } else {
+                target.appendChild(row);
+            }
         });
     }
 
