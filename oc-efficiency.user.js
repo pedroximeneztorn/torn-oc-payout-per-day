@@ -18,9 +18,37 @@
     // --- Configuration & data ---
     const CACHE_DURATION = 24 * 60 * 60 * 1000;
     const CATEGORIES = ['Drug', 'Material', 'Special', 'Supply Pack'];
-    const SUCCESS_BASELINE = 0.8;
 
-    // `slots` is the participant count from oc.md (and matches `days` since
+    // =====================================================================
+    // TUNING — assumptions and placeholders we aren't fully sure of.
+    // Adjust here (and resave) when better data shows up. The user-facing
+    // "success baseline" lives in settings (default 80%) so it can be
+    // changed at runtime without editing this file.
+    //
+    // Anything else we're unsure of should be added here too, so unknowns
+    // are easy to find in one place.
+    // =====================================================================
+    const ASSUMPTIONS = {
+        // When an antecedent in a chain crime succeeds, what fraction of
+        // the time does it actually spawn the next scenario? Assuming 50%
+        chainSpawnProbability: 0.5,
+
+        // For "additional possibility of" drop groups (currently just the
+        // Window of Opportunity secondary), what fraction of completions
+        // grant a drop from that group at all? Items inside the group are
+        // assumed uniformly distributed.
+        secondaryDropProbability: 0.5,
+
+        // Cesium-137 isn't returning a market price from the API
+        cesium137FallbackValue: 500_000_000,
+    };
+
+    // Default percent assumed for a single OC succeeding. Overridable from
+    // the settings panel — this is just the starting value when no user
+    // setting exists yet.
+    const DEFAULT_SUCCESS_BASELINE_PCT = 80;
+
+    // `slots` is the participant count from (and matches `days` since
     // each member has a 24h planning window and slots plan sequentially).
     //
     // Chain crimes: an antecedent has `chainsTo` and no payout of its own —
@@ -29,57 +57,97 @@
     // chain. So a No Reserve participant and a Bidding War participant get
     // the same per-head share of Bidding War's cash.
     //
-    // Cash payouts here are calibrated against the Torncity wiki (oc.md).
-    // Several crimes actually pay items, not cash — those are flagged with
-    // a TODO and currently retain rem4rk's v3.7 cash estimate as a coarse
-    // placeholder until we have the item ids.
+    // Cash payouts here are calibrated against the Torncity wiki
+    //
+    // Items are valued at market price by default — the game pays out the
+    // market value of items as cash when a faction picks the cash-equivalent
+    // option. Counter Offer is the documented exception (uses sell value),
+    // signalled with `valuation: 'sell'`.
+    //
+    // For probabilistic drops (e.g. "1× A or 1× B or 1× C") each option has
+    // a `weight` so its expected contribution is `qty × price × weight`.
+    // Weights default to 1 for always-drops.
     const OC_DATA = {
-        // Items only per oc.md (Morphine, First Aid Kits, Box of Medical
-        // Supplies). Keeping rem4rk's cash estimate as a placeholder.
-        'First Aid and Abet':       { days: 3, slots: 3, payout: [2000000, 3000000] }, // TODO: actually items
+        'First Aid and Abet':       { days: 3, slots: 3, items: [
+            { id: 66,  name: 'Morphine',                qty: [4, 26] },
+            { id: 365, name: 'Box of Medical Supplies', qty: [1, 2] },
+            // OR-branch: 50% gets Small First Aid Kits, 50% gets First Aid Kits.
+            { id: 68,  name: 'Small First Aid Kit',     qty: [2, 2], weight: 0.5 },
+            { id: 67,  name: 'First Aid Kit',           qty: [3, 4], weight: 0.5 },
+        ] },
         'Mob Mentality':            { days: 4, slots: 4, payout: [673000, 1500000] },
         'Pet Project':              { days: 3, slots: 3, payout: [414000, 806000] },
-        // oc.md leaves min/max as ??? — keeping rem4rk's guess.
-        'Thou Shalt Not Steal':     { days: 3, slots: 3, payout: [1000000, 2000000] }, // TODO: oc.md unknown
+        // Wiki leaves min/max as ??? — values here are a rough guess.
+        'Thou Shalt Not Steal':     { days: 3, slots: 3, payout: [1000000, 2000000] }, // TODO: Wiki unknown
         'Cash Me If You Can':       { days: 3, slots: 3, payout: [829000, 1601000] },
-        // Items only per oc.md (1× Mercia SLR / Echo R8 / Lolo 458).
-        'Best of the Lot':          { days: 4, slots: 4, payout: [12000000, 18000000] }, // TODO: actually items
-        // Items only per oc.md (1× Veloria LFA / Weston Marlin / Lambrini).
-        'Smoke and Wing Mirrors':   { days: 4, slots: 4, payout: [20000000, 30000000] }, // TODO: actually items
+        'Best of the Lot':          { days: 4, slots: 4, items: [
+            // Single-item drop, 1/3 each.
+            { id: 523, name: 'Mercia SLR', qty: [1, 1], weight: 1 / 3 },
+            { id: 518, name: 'Echo R8',    qty: [1, 1], weight: 1 / 3 },
+            { id: 520, name: 'Lolo 458',   qty: [1, 1], weight: 1 / 3 },
+        ] },
+        'Smoke and Wing Mirrors':   { days: 4, slots: 4, items: [
+            // Single-item drop, 1/3 each.
+            { id: 522, name: 'Veloria LFA',        qty: [1, 1], weight: 1 / 3 },
+            { id: 517, name: 'Weston Marlin 177',  qty: [1, 1], weight: 1 / 3 },
+            { id: 521, name: 'Lambrini Torobravo', qty: [1, 1], weight: 1 / 3 },
+        ] },
         'Market Forces':            { days: 5, slots: 5, payout: [5095000, 8575000] },
-        // Items only per oc.md (Moonshine, Crocozade, Damp Valley, Goose
-        // Juice, Pixie Sticks; market values listed in oc.md).
-        'Gaslight the Way':         { days: 6, slots: 6, payout: [3000000, 5000000] }, // TODO: actually items
+        'Gaslight the Way':         { days: 6, slots: 6, items: [
+            // Wiki lists 5 possible items with no quantity — assume 1 of one,
+            // uniformly distributed.
+            { id: 984, name: 'Bottle of Moonshine', qty: [1, 1], weight: 1 / 5 },
+            { id: 987, name: 'Can of Crocozade',    qty: [1, 1], weight: 1 / 5 },
+            { id: 986, name: 'Can of Damp Valley',  qty: [1, 1], weight: 1 / 5 },
+            { id: 985, name: 'Can of Goose Juice',  qty: [1, 1], weight: 1 / 5 },
+            { id: 151, name: 'Pixie Sticks',        qty: [1, 1], weight: 1 / 5 },
+        ] },
         'Snow Blind':               { days: 4, slots: 4, payout: [5575000, 10565000] },
-        // oc.md gives only the max ($8,976,000) — min still unknown.
-        'Plucking the Lotus Petal': { days: 4, slots: 4, payout: [7000000, 8976000] }, // TODO: oc.md min unknown
-        'Stage Fright':             { days: 6, slots: 6, items: [{ id: 206, name: 'Xanax', qty: [10, 30] }] },
+        // Wiki gives only the max ($8,976,000) — min still unknown.
+        'Plucking the Lotus Petal': { days: 4, slots: 4, payout: [7000000, 8976000] }, // TODO: Wiki min unknown
+        'Stage Fright':             { days: 6, slots: 6, items: [
+            { id: 206, name: 'Xanax', qty: [10, 30] },
+        ] },
         'Guardian Angels':          { days: 3, slots: 3, payout: [6296000, 8883000] },
         'Honey Trap':               { days: 3, slots: 3, payout: [15753000, 25671000] },
-        // Items per oc.md, valued by sell price (not market price), with the
-        // total estimated to be at least $24M. Kept as cash placeholder.
-        'Counter Offer':            { days: 5, slots: 5, payout: [24000000, 40000000] }, // TODO: actually items, sell-value ≥ $24M
+        // Wiki doesn't enumerate Counter Offer items but says the reward
+        // uses sell value (not market). Without an item list we keep a
+        // coarse cash placeholder; Wiki estimates the total at ≥$24M.
+        'Counter Offer':            { days: 5, slots: 5, payout: [24000000, 40000000] }, // TODO: items not enumerated; cash placeholder
         'No Reserve':               { days: 3, slots: 3, chainsTo: 'Bidding War' },
         'Bidding War':              { days: 6, slots: 6, payout: [71291000, 133980000] },
         'Leave No Trace':           { days: 3, slots: 3, payout: [9660000, 13474000] },
         'Sneaky Git Grab':          { days: 4, slots: 4, payout: [21384000, 38757000] },
         'Blast from the Past':      { days: 6, slots: 6, payout: [98321000, 202382000] },
-        // Items per oc.md (Priceless Painting / Naval Cutlass + secondaries
-        // like Vairocana Buddha Sculpture / Shabti / Companion Script /
-        // Ganesha Sculpture / Medieval Helmet).
-        'Window of Opportunity':    { days: 5, slots: 5, payout: [30000000, 40000000] }, // TODO: actually items
+        'Window of Opportunity':    { days: 5, slots: 5, items: (() => {
+            // Primary: 1× Painting OR 1× Cutlass, 50/50.
+            // Secondary group: Wiki says "additional possibility of" one of
+            // five — drop probability is unknown so it's gated on
+            // ASSUMPTIONS.secondaryDropProbability and uniformly distributed
+            // across the five candidates.
+            const sec = ASSUMPTIONS.secondaryDropProbability / 5;
+            return [
+                { id: 1508, name: 'Priceless Painting',         qty: [1, 1], weight: 0.5 },
+                { id: 615,  name: 'Naval Cutlass',              qty: [1, 1], weight: 0.5 },
+                { id: 454,  name: 'Vairocana Buddha Sculpture', qty: [8, 8], weight: sec },
+                { id: 458,  name: 'Shabti Sculpture',           qty: [2, 2], weight: sec },
+                { id: 456,  name: 'Companion Script : Ubay',    qty: [2, 2], weight: sec },
+                { id: 453,  name: 'Ganesha Sculpture',          qty: [1, 1], weight: sec },
+                { id: 538,  name: 'Medieval Helmet',            qty: [4, 4], weight: sec },
+            ];
+        })() },
         'Break the Bank':           { days: 6, slots: 6, payout: [195135000, 395980000] },
         'Clinical Precision':       { days: 4, slots: 4, payout: [61363000, 122565000] },
         'Stacking the Deck':        { days: 4, slots: 4, chainsTo: 'Ace in the Hole' },
         'Ace in the Hole':          { days: 5, slots: 5, payout: [280005000, 579919000] },
         'Manifest Cruelty':         { days: 4, slots: 4, chainsTo: 'Gone Fission' },
         'Gone Fission':             { days: 5, slots: 5, chainsTo: 'Crane Reaction' },
-        // Per oc.md the terminal item is 1–3 × Cesium-137. v3.7 had this as
-        // id 370 ("Cedar Wood") with qty [2,5], both wrong. We don't have
-        // Cesium-137's item id yet, so we use a sentinel id of 0 — that
-        // never matches the market cache, so the breakdown will display
-        // "price not cached" until the id is filled in.
-        'Crane Reaction':           { days: 6, slots: 6, items: [{ id: 0, name: 'Cesium-137', qty: [1, 3] }] }, // TODO: lookup correct item id
+        'Crane Reaction':           { days: 6, slots: 6, items: [
+            // Cesium-137 has no live market or sell price yet (too new),
+            // so we fall back to ASSUMPTIONS.cesium137FallbackValue until
+            // the item starts trading.
+            { id: 336, name: 'Cesium-137', qty: [1, 3], priceFallback: ASSUMPTIONS.cesium137FallbackValue },
+        ] },
     };
 
     // Lookup from a normalized title to the canonical OC_DATA key, used by
@@ -138,6 +206,7 @@
     const DEFAULT_SETTINGS = {
         apiKey: '',
         factionPayout: 90,
+        successBaseline: DEFAULT_SUCCESS_BASELINE_PCT,
         marketCache: {},
         lastMarketSync: 0,
     };
@@ -145,12 +214,23 @@
     function normalizeSettings(raw) {
         const s = raw && typeof raw === 'object' ? raw : {};
         const payout = Number(s.factionPayout);
+        const baseline = Number(s.successBaseline);
         const sync = Number(s.lastMarketSync);
+        // Cache values used to be raw numbers (market price only). They're
+        // now {market, sell} objects — wipe legacy entries so we resync.
+        let marketCache = s.marketCache && typeof s.marketCache === 'object' ? s.marketCache : {};
+        const sample = Object.values(marketCache)[0];
+        if (sample !== undefined && (typeof sample !== 'object' || sample === null)) {
+            marketCache = {};
+        }
         return {
             apiKey: typeof s.apiKey === 'string' ? s.apiKey : DEFAULT_SETTINGS.apiKey,
             factionPayout: Number.isFinite(payout) ? payout : DEFAULT_SETTINGS.factionPayout,
-            marketCache: s.marketCache && typeof s.marketCache === 'object' ? s.marketCache : {},
-            lastMarketSync: Number.isFinite(sync) ? sync : 0,
+            successBaseline: Number.isFinite(baseline) && baseline >= 0 && baseline <= 100
+                ? baseline
+                : DEFAULT_SUCCESS_BASELINE_PCT,
+            marketCache,
+            lastMarketSync: marketCache === s.marketCache && Number.isFinite(sync) ? sync : 0,
         };
     }
 
@@ -276,8 +356,19 @@
                             console.log(`[OC] API error for ${cat}:`, data.error);
                         } else if (Array.isArray(data.items)) {
                             data.items.forEach(i => {
-                                const price = i?.value?.market_price;
-                                if (typeof price === 'number') merged[i.id] = price;
+                                const v = i?.value;
+                                if (!v) return;
+                                // Treat 0/null as "no price" — some items have a
+                                // market_price of 0 because they're vendor-only,
+                                // and we want to fall back to sell rather than
+                                // value those at $0.
+                                const m = v.market_price;
+                                const s = v.sell_price;
+                                const market = typeof m === 'number' && m > 0 ? m : null;
+                                const sell = typeof s === 'number' && s > 0 ? s : null;
+                                if (market != null || sell != null) {
+                                    merged[i.id] = { market, sell };
+                                }
                             });
                             console.log(`[OC] Got ${data.items.length} items for ${cat}.`);
                         } else {
@@ -315,14 +406,17 @@
         panel.innerHTML = `
             <div style="${fText('#37bcd6', '11px')} border-bottom:1px solid #37bcd6; margin-bottom:8px;">OC EFFICIENCY</div>
             ${noticeHtml}
-            <div style="${fText('#fff', '12px')} margin-bottom:10px;">CURRENT CUT: <span id="oc-cut-display" style="color:#0f0 !important;">${settings.factionPayout}%</span></div>
+            <div style="${fText('#fff', '12px')} margin-bottom:4px;">CURRENT CUT: <span id="oc-cut-display" style="color:#0f0 !important;">${settings.factionPayout}%</span></div>
+            <div style="${fText('#fff', '12px')} margin-bottom:10px;">SUCCESS BASELINE: <span id="oc-success-display" style="color:#0f0 !important;">${settings.successBaseline}%</span></div>
             <button id="oc-btn-payout" style="width:100%; background:#222; color:#fff; border:1px solid #444; padding:5px; margin-bottom:5px; cursor:pointer;">Adjust Payout %</button>
+            <button id="oc-btn-success" style="width:100%; background:#222; color:#fff; border:1px solid #444; padding:5px; margin-bottom:5px; cursor:pointer;">Adjust Success %</button>
             <button id="oc-btn-sync" style="width:100%; background:#222; color:#fff; border:1px solid #444; padding:5px; margin-bottom:5px; cursor:pointer;">Force Market Sync</button>
             <button id="oc-btn-api" style="width:100%; background:#222; color:#fff; border:1px solid #444; padding:5px; cursor:pointer;">${settings.apiKey ? 'Update API Key' : 'Set API Key'}</button>
         `;
         document.body.appendChild(panel);
 
         document.getElementById('oc-btn-payout').onclick = promptPayout;
+        document.getElementById('oc-btn-success').onclick = promptSuccessBaseline;
         document.getElementById('oc-btn-sync').onclick = () => syncMarketPrices(true);
         document.getElementById('oc-btn-api').onclick = promptApiKey;
     }
@@ -334,6 +428,21 @@
         if (Number.isFinite(num) && num >= 0 && num <= 100) {
             saveSettings({ factionPayout: num });
             const display = document.getElementById('oc-cut-display');
+            if (display) display.textContent = `${num}%`;
+            redrawStats();
+        }
+    }
+
+    function promptSuccessBaseline() {
+        const v = prompt(
+            `Enter the assumed per-crime success rate (0–100).\n\nThis is what we multiply payouts by to estimate expected earnings. Chain antecedents are discounted further by ${(ASSUMPTIONS.chainSpawnProbability * 100).toFixed(0)}% per spawn.`,
+            String(settings.successBaseline),
+        );
+        if (v == null) return;
+        const num = parseFloat(v);
+        if (Number.isFinite(num) && num >= 0 && num <= 100) {
+            saveSettings({ successBaseline: num });
+            const display = document.getElementById('oc-success-display');
             if (display) display.textContent = `${num}%`;
             redrawStats();
         }
@@ -422,8 +531,8 @@
             if (!config || !target || crime.querySelector('.ev-display-final')) return;
 
             // Walk the chain to find which crime actually pays out and how
-            // wide the participant pool is. For non-chain crimes this is
-            // just [name], pool=slots, hops=1 — same as before.
+            // wide the participant pool is. Non-chain crimes resolve to
+            // [name] with pool=slots and hops=1.
             const chainNames = resolveChain(title) || [title];
             const chainConfigs = chainNames.map(n => OC_DATA_BY_TITLE[normalizeTitle(n)]).filter(Boolean);
             const terminal = chainConfigs[chainConfigs.length - 1];
@@ -432,9 +541,12 @@
             // --- Compute the breakdown step by step, keeping each intermediate
             //     value so the details panel can show its work.
 
-            // 1. Raw payout from the terminal crime in the chain. Cash is
-            //    taken from terminal.payout; items are summed at current
-            //    market prices (per-item subtotals stashed for display).
+            // 1. Raw payout from the terminal crime in the chain. Cash comes
+            //    from terminal.payout; items are summed at the per-crime
+            //    valuation (market by default, sell for Counter Offer-style
+            //    crimes), with optional per-item weights for probabilistic
+            //    OR-branches and a quantity range.
+            const valuation = terminal.valuation || 'market';
             const itemBreakdown = [];
             let rawLow = 0;
             let rawHigh = 0;
@@ -444,9 +556,29 @@
             }
             if (terminal.items) {
                 terminal.items.forEach(it => {
-                    const price = market[it.id];
-                    const itemLow = (price || 0) * it.qty[0];
-                    const itemHigh = (price || 0) * it.qty[1];
+                    const cached = market[it.id];
+                    // Default valuation is market, with sell as a fallback for
+                    // items that have no market price (vendor-only loot like
+                    // sculptures and Naval Cutlass). Sell-explicit crimes
+                    // (Counter Offer) never fall back. As a last resort we
+                    // use the per-item priceFallback for items that haven't
+                    // started trading yet (e.g. Cesium-137).
+                    let price = null;
+                    let priceFromFallback = false;
+                    if (cached) {
+                        if (valuation === 'sell') {
+                            price = cached.sell;
+                        } else {
+                            price = cached.market ?? cached.sell;
+                        }
+                    }
+                    if (price == null && it.priceFallback != null) {
+                        price = it.priceFallback;
+                        priceFromFallback = true;
+                    }
+                    const weight = it.weight ?? 1;
+                    const itemLow = (price ?? 0) * it.qty[0] * weight;
+                    const itemHigh = (price ?? 0) * it.qty[1] * weight;
                     rawLow += itemLow;
                     rawHigh += itemHigh;
                     itemBreakdown.push({
@@ -454,7 +586,9 @@
                         name: it.name || `item #${it.id}`,
                         qtyLow: it.qty[0],
                         qtyHigh: it.qty[1],
+                        weight,
                         price,
+                        priceFromFallback,
                         subtotalLow: itemLow,
                         subtotalHigh: itemHigh,
                     });
@@ -464,12 +598,15 @@
             // 2. Pool: every slot in every crime in the chain shares one head.
             const pool = chainConfigs.reduce((s, c) => s + (c.slots || 1), 0);
 
-            // 3. Hops: each unfinished crime adds a SUCCESS_BASELINE factor
+            // 3. Hops: each unfinished crime adds a per-crime success factor
             //    since the chain only pays out if every step succeeds.
             //    Terminal = 1 hop (its own success); antecedent = 2; root of
-            //    a 3-hop chain = 3.
+            //    a 3-hop chain = 3. Antecedents also need to spawn the next
+            //    crime (n-1 spawn events for an n-step chain).
+            const successRate = settings.successBaseline / 100;
+            const spawnRate = ASSUMPTIONS.chainSpawnProbability;
             const hops = chainConfigs.length - chainConfigs.findIndex(c => c === config);
-            const successFactor = SUCCESS_BASELINE ** hops;
+            const successFactor = (successRate ** hops) * (spawnRate ** (hops - 1));
 
             // 4. Apply faction cut, then success factor, then divide by pool.
             const factionLow = rawLow * factionRate;
@@ -507,17 +644,29 @@
                 ? `${title} — chain antecedent, ${hops - 1} hop${hops > 2 ? 's' : ''} to payout`
                 : title;
 
-            // Item rows: name, qty range, market price, subtotal range. If a
-            // price hasn't been cached yet, show "—" so the user can tell.
+            // Item rows: name, qty range, price (market or sell), optional
+            // chance weight, and weighted subtotal range. Items with no
+            // cached price show that explicitly so it's clear why a $0
+            // contribution arose.
             const itemRowsHtml = itemBreakdown.map(it => {
-                const priceCell = it.price != null ? fmt(it.price) : '<em style="color:#888">price not cached</em>';
+                let priceCell;
+                if (it.price == null) {
+                    priceCell = '<em style="color:#888">price not cached</em>';
+                } else if (it.priceFromFallback) {
+                    priceCell = `${fmt(it.price)} <span style="color:#888">(fallback)</span>`;
+                } else {
+                    priceCell = fmt(it.price);
+                }
                 const subCell = it.price != null ? fmtRange(it.subtotalLow, it.subtotalHigh) : '—';
-                return `<span style="${fText('#fff', '11px', 'normal')}">${qtyRange(it.qtyLow, it.qtyHigh)} × ${it.name} @ ${priceCell} = ${subCell}</span>`;
+                const weightLabel = it.weight !== 1
+                    ? ` <span style="color:#888">(× ${(it.weight * 100).toFixed(it.weight < 0.1 ? 1 : 0)}% chance)</span>`
+                    : '';
+                return `<span style="${fText('#fff', '11px', 'normal')}">${qtyRange(it.qtyLow, it.qtyHigh)} × ${it.name}${weightLabel} @ ${priceCell} = ${subCell}</span>`;
             }).join('<br>');
 
             const successDetail = hops > 1
-                ? `${(SUCCESS_BASELINE * 100).toFixed(0)}%^${hops} = ${(successFactor * 100).toFixed(1)}% (every chain step must succeed)`
-                : `${(successFactor * 100).toFixed(1)}% (assumed flat)`;
+                ? `${(successRate * 100).toFixed(0)}%^${hops} × ${(spawnRate * 100).toFixed(0)}%^${hops - 1} = ${(successFactor * 100).toFixed(1)}% (every chain step succeeds and spawns)`
+                : `${(successFactor * 100).toFixed(1)}% (per-crime baseline)`;
 
             const lblStyle = `${fText('#888', '10px', 'normal')} text-transform:uppercase; letter-spacing:0.04em; white-space:nowrap;`;
             const valStyle = `${fText('#fff', '11px', 'normal')}`;
@@ -542,7 +691,7 @@
                             chainNames.length > 1 ? `Terminal cash` : 'Raw payout',
                             `${fmtRange(terminal.payout[0], terminal.payout[1])}${chainNames.length > 1 ? ` (from ${chainNames[chainNames.length - 1]})` : ''}`,
                         ) : ''}
-                        ${terminal.items ? detailRow('Items', itemRowsHtml) : ''}
+                        ${terminal.items ? detailRow(`Items (${valuation} value)`, itemRowsHtml) : ''}
                         ${terminal.items ? detailRow('Raw value', fmtRange(rawLow, rawHigh)) : ''}
                         ${detailRow('Faction cut', `${(factionRate * 100).toFixed(1)}% → ${fmtRange(factionLow, factionHigh)}`)}
                         ${detailRow('Success', successDetail)}
@@ -640,6 +789,7 @@
 
     GM_registerMenuCommand('OC: Set API key', promptApiKey);
     GM_registerMenuCommand('OC: Set faction payout %', promptPayout);
+    GM_registerMenuCommand('OC: Set success baseline %', promptSuccessBaseline);
     GM_registerMenuCommand('OC: Force market sync', () => syncMarketPrices(true));
 
     function start() {
