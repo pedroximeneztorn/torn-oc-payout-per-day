@@ -29,40 +29,57 @@
     // chain. So a No Reserve participant and a Bidding War participant get
     // the same per-head share of Bidding War's cash.
     //
-    // Note: cash magnitudes here are inherited from rem4rk's v3.7 and many
-    // are off vs oc.md (e.g. Honey Trap, Bidding War, Break the Bank, Ace
-    // in the Hole). Item-payout crimes that we currently model as cash
-    // (Best of the Lot, Smoke and Wing Mirrors, Gaslight the Way, etc.)
-    // are also still wrong. Fixes for both are tracked separately.
+    // Cash payouts here are calibrated against the Torncity wiki (oc.md).
+    // Several crimes actually pay items, not cash — those are flagged with
+    // a TODO and currently retain rem4rk's v3.7 cash estimate as a coarse
+    // placeholder until we have the item ids.
     const OC_DATA = {
-        'First Aid and Abet':       { days: 3, slots: 3, payout: [2000000, 3000000] },
+        // Items only per oc.md (Morphine, First Aid Kits, Box of Medical
+        // Supplies). Keeping rem4rk's cash estimate as a placeholder.
+        'First Aid and Abet':       { days: 3, slots: 3, payout: [2000000, 3000000] }, // TODO: actually items
         'Mob Mentality':            { days: 4, slots: 4, payout: [673000, 1500000] },
         'Pet Project':              { days: 3, slots: 3, payout: [414000, 806000] },
-        'Thou Shalt Not Steal':     { days: 3, slots: 3, payout: [1000000, 2000000] },
+        // oc.md leaves min/max as ??? — keeping rem4rk's guess.
+        'Thou Shalt Not Steal':     { days: 3, slots: 3, payout: [1000000, 2000000] }, // TODO: oc.md unknown
         'Cash Me If You Can':       { days: 3, slots: 3, payout: [829000, 1601000] },
-        'Best of the Lot':          { days: 4, slots: 4, payout: [12000000, 18000000] },
-        'Smoke and Wing Mirrors':   { days: 4, slots: 4, payout: [20000000, 30000000] },
+        // Items only per oc.md (1× Mercia SLR / Echo R8 / Lolo 458).
+        'Best of the Lot':          { days: 4, slots: 4, payout: [12000000, 18000000] }, // TODO: actually items
+        // Items only per oc.md (1× Veloria LFA / Weston Marlin / Lambrini).
+        'Smoke and Wing Mirrors':   { days: 4, slots: 4, payout: [20000000, 30000000] }, // TODO: actually items
         'Market Forces':            { days: 5, slots: 5, payout: [5095000, 8575000] },
-        'Gaslight the Way':         { days: 6, slots: 6, payout: [3000000, 5000000] },
+        // Items only per oc.md (Moonshine, Crocozade, Damp Valley, Goose
+        // Juice, Pixie Sticks; market values listed in oc.md).
+        'Gaslight the Way':         { days: 6, slots: 6, payout: [3000000, 5000000] }, // TODO: actually items
         'Snow Blind':               { days: 4, slots: 4, payout: [5575000, 10565000] },
-        'Plucking the Lotus Petal': { days: 4, slots: 4, payout: [7000000, 9000000] },
+        // oc.md gives only the max ($8,976,000) — min still unknown.
+        'Plucking the Lotus Petal': { days: 4, slots: 4, payout: [7000000, 8976000] }, // TODO: oc.md min unknown
         'Stage Fright':             { days: 6, slots: 6, items: [{ id: 206, name: 'Xanax', qty: [10, 30] }] },
-        'Guardian Angels':          { days: 3, slots: 3, payout: [10000000, 14000000] },
-        'Honey Trap':               { days: 3, slots: 3, payout: [7000000, 11000000] },
-        'Counter Offer':            { days: 5, slots: 5, payout: [12000000, 18000000] },
+        'Guardian Angels':          { days: 3, slots: 3, payout: [6296000, 8883000] },
+        'Honey Trap':               { days: 3, slots: 3, payout: [15753000, 25671000] },
+        // Items per oc.md, valued by sell price (not market price), with the
+        // total estimated to be at least $24M. Kept as cash placeholder.
+        'Counter Offer':            { days: 5, slots: 5, payout: [24000000, 40000000] }, // TODO: actually items, sell-value ≥ $24M
         'No Reserve':               { days: 3, slots: 3, chainsTo: 'Bidding War' },
-        'Bidding War':              { days: 6, slots: 6, payout: [15000000, 21000000] },
-        'Leave No Trace':           { days: 3, slots: 3, payout: [8000000, 12000000] },
-        'Sneaky Git Grab':          { days: 4, slots: 4, payout: [11000000, 17000000] },
-        'Blast from the Past':      { days: 6, slots: 6, payout: [40000000, 50000000] },
-        'Window of Opportunity':    { days: 5, slots: 5, payout: [30000000, 40000000] },
-        'Break the Bank':           { days: 6, slots: 6, payout: [50000000, 70000000] },
+        'Bidding War':              { days: 6, slots: 6, payout: [71291000, 133980000] },
+        'Leave No Trace':           { days: 3, slots: 3, payout: [9660000, 13474000] },
+        'Sneaky Git Grab':          { days: 4, slots: 4, payout: [21384000, 38757000] },
+        'Blast from the Past':      { days: 6, slots: 6, payout: [98321000, 202382000] },
+        // Items per oc.md (Priceless Painting / Naval Cutlass + secondaries
+        // like Vairocana Buddha Sculpture / Shabti / Companion Script /
+        // Ganesha Sculpture / Medieval Helmet).
+        'Window of Opportunity':    { days: 5, slots: 5, payout: [30000000, 40000000] }, // TODO: actually items
+        'Break the Bank':           { days: 6, slots: 6, payout: [195135000, 395980000] },
         'Clinical Precision':       { days: 4, slots: 4, payout: [61363000, 122565000] },
         'Stacking the Deck':        { days: 4, slots: 4, chainsTo: 'Ace in the Hole' },
-        'Ace in the Hole':          { days: 5, slots: 5, payout: [50000000, 60000000] },
+        'Ace in the Hole':          { days: 5, slots: 5, payout: [280005000, 579919000] },
         'Manifest Cruelty':         { days: 4, slots: 4, chainsTo: 'Gone Fission' },
         'Gone Fission':             { days: 5, slots: 5, chainsTo: 'Crane Reaction' },
-        'Crane Reaction':           { days: 6, slots: 6, items: [{ id: 370, name: 'Cedar Wood', qty: [2, 5] }] },
+        // Per oc.md the terminal item is 1–3 × Cesium-137. v3.7 had this as
+        // id 370 ("Cedar Wood") with qty [2,5], both wrong. We don't have
+        // Cesium-137's item id yet, so we use a sentinel id of 0 — that
+        // never matches the market cache, so the breakdown will display
+        // "price not cached" until the id is filled in.
+        'Crane Reaction':           { days: 6, slots: 6, items: [{ id: 0, name: 'Cesium-137', qty: [1, 3] }] }, // TODO: lookup correct item id
     };
 
     // Lookup from a normalized title to the canonical OC_DATA key, used by
