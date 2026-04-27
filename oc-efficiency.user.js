@@ -280,12 +280,66 @@
         return null;
     }
 
+    // --- Theme ---
+    // Torn marks dark mode with `d-mode` on the body; the absence of that
+    // class means the user is on light mode. We pick a palette accordingly
+    // so our overlay blends in either way.
+    const THEMES = {
+        dark: {
+            bg: '#000',
+            border: '#37bcd6',
+            textPrimary: '#fff',
+            textHint: '#ccc',
+            textMuted: '#888',
+            accentGreen: '#00ff00',
+            accentAmber: '#ffb300',
+            accentCyan: '#37bcd6',
+            divider: '#333',
+            shadow: '1px 1px 0px #000, -1px -1px 0px #000',
+            buttonBg: '#222',
+            buttonBorder: '#444',
+            noticeBg: '#1a1208',
+            noticeBorder: '#5a3a00',
+        },
+        light: {
+            bg: '#f5f5f5',
+            border: '#2a8aa8',
+            textPrimary: '#111',
+            textHint: '#333',
+            textMuted: '#666',
+            accentGreen: '#0a7000',
+            accentAmber: '#aa6000',
+            accentCyan: '#2a8aa8',
+            divider: '#ccc',
+            shadow: 'none',
+            buttonBg: '#e8e8e8',
+            buttonBorder: '#bbb',
+            noticeBg: '#fff5e5',
+            noticeBorder: '#cca366',
+        },
+    };
+    // Detect Torn's current theme from the actual rendered body background
+    // rather than guessing from class names (Torn's `d-mode` body class
+    // doesn't reliably switch off in light mode). Anything darker than
+    // mid-grey is treated as dark.
+    function isDarkMode() {
+        if (!document.body) return true;
+        const bg = getComputedStyle(document.body).backgroundColor;
+        const m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (!m) return true;
+        const luminance = +m[1] * 0.299 + +m[2] * 0.587 + +m[3] * 0.114;
+        return luminance < 128;
+    }
+    function currentTheme() {
+        return isDarkMode() ? THEMES.dark : THEMES.light;
+    }
+
     // --- Style helper ---
     const fText = (color, size = '12px', bold = 'bold') => `
         color: ${color} !important;
         font-size: ${size} !important;
         font-weight: ${bold} !important;
-        text-shadow: 1px 1px 0px #000, -1px -1px 0px #000 !important;
+        text-shadow: ${currentTheme().shadow} !important;
         background: transparent !important;
         font-family: 'Courier New', monospace !important;
     `;
@@ -394,24 +448,27 @@
     function injectControlPanel() {
         if (document.getElementById('oc-persistent-panel')) return;
 
+        const t = currentTheme();
+        const btnStyle = `width:100%; background:${t.buttonBg}; color:${t.textPrimary}; border:1px solid ${t.buttonBorder}; padding:5px; margin-bottom:5px; cursor:pointer;`;
+
         const noticeHtml = settings.apiKey ? '' : `
-            <div style="${fText('#ffb300', '10px', 'normal')} background:#1a1208 !important; border:1px solid #5a3a00 !important; padding:6px; margin-bottom:8px; line-height:1.35;">
+            <div style="${fText(t.accentAmber, '10px', 'normal')} background:${t.noticeBg} !important; border:1px solid ${t.noticeBorder} !important; padding:6px; margin-bottom:8px; line-height:1.35;">
                 Add a Torn API key to fetch market prices for item-reward crimes (Stage Fright, Crane Reaction, Gone Fission). Cash-reward crimes work without one.
             </div>
         `;
 
         const panel = document.createElement('div');
         panel.id = 'oc-persistent-panel';
-        panel.setAttribute('style', 'position:fixed; bottom:20px; left:20px; z-index:999999; background:#000 !important; border:2px solid #37bcd6 !important; padding:12px; width:220px; box-shadow: 5px 5px 20px #000;');
+        panel.setAttribute('style', `position:fixed; bottom:20px; left:20px; z-index:999999; background:${t.bg} !important; border:2px solid ${t.border} !important; padding:12px; width:220px; box-shadow: 5px 5px 20px rgba(0,0,0,0.5);`);
         panel.innerHTML = `
-            <div style="${fText('#37bcd6', '11px')} border-bottom:1px solid #37bcd6; margin-bottom:8px;">OC EFFICIENCY</div>
+            <div style="${fText(t.accentCyan, '11px')} border-bottom:1px solid ${t.border}; margin-bottom:8px;">OC EFFICIENCY</div>
             ${noticeHtml}
-            <div style="${fText('#fff', '12px')} margin-bottom:4px;">CURRENT CUT: <span id="oc-cut-display" style="color:#0f0 !important;">${settings.factionPayout}%</span></div>
-            <div style="${fText('#fff', '12px')} margin-bottom:10px;">SUCCESS BASELINE: <span id="oc-success-display" style="color:#0f0 !important;">${settings.successBaseline}%</span></div>
-            <button id="oc-btn-payout" style="width:100%; background:#222; color:#fff; border:1px solid #444; padding:5px; margin-bottom:5px; cursor:pointer;">Adjust Payout %</button>
-            <button id="oc-btn-success" style="width:100%; background:#222; color:#fff; border:1px solid #444; padding:5px; margin-bottom:5px; cursor:pointer;">Adjust Success %</button>
-            <button id="oc-btn-sync" style="width:100%; background:#222; color:#fff; border:1px solid #444; padding:5px; margin-bottom:5px; cursor:pointer;">Force Market Sync</button>
-            <button id="oc-btn-api" style="width:100%; background:#222; color:#fff; border:1px solid #444; padding:5px; cursor:pointer;">${settings.apiKey ? 'Update API Key' : 'Set API Key'}</button>
+            <div style="${fText(t.textPrimary, '12px')} margin-bottom:4px;">CURRENT CUT: <span id="oc-cut-display" style="color:${t.accentGreen} !important;">${settings.factionPayout}%</span></div>
+            <div style="${fText(t.textPrimary, '12px')} margin-bottom:10px;">SUCCESS BASELINE: <span id="oc-success-display" style="color:${t.accentGreen} !important;">${settings.successBaseline}%</span></div>
+            <button id="oc-btn-payout" style="${btnStyle}">Adjust Payout %</button>
+            <button id="oc-btn-success" style="${btnStyle}">Adjust Success %</button>
+            <button id="oc-btn-sync" style="${btnStyle}">Force Market Sync</button>
+            <button id="oc-btn-api" style="${btnStyle.replace('margin-bottom:5px;', '')}">${settings.apiKey ? 'Update API Key' : 'Set API Key'}</button>
         `;
         document.body.appendChild(panel);
 
@@ -648,42 +705,44 @@
             // chance weight, and weighted subtotal range. Items with no
             // cached price show that explicitly so it's clear why a $0
             // contribution arose.
+            const t = currentTheme();
+
             const itemRowsHtml = itemBreakdown.map(it => {
                 let priceCell;
                 if (it.price == null) {
-                    priceCell = '<em style="color:#888">price not cached</em>';
+                    priceCell = `<em style="color:${t.textMuted}">price not cached</em>`;
                 } else if (it.priceFromFallback) {
-                    priceCell = `${fmt(it.price)} <span style="color:#888">(fallback)</span>`;
+                    priceCell = `${fmt(it.price)} <span style="color:${t.textMuted}">(fallback)</span>`;
                 } else {
                     priceCell = fmt(it.price);
                 }
                 const subCell = it.price != null ? fmtRange(it.subtotalLow, it.subtotalHigh) : '—';
                 const weightLabel = it.weight !== 1
-                    ? ` <span style="color:#888">(× ${(it.weight * 100).toFixed(it.weight < 0.1 ? 1 : 0)}% chance)</span>`
+                    ? ` <span style="color:${t.textMuted}">(× ${(it.weight * 100).toFixed(it.weight < 0.1 ? 1 : 0)}% chance)</span>`
                     : '';
-                return `<span style="${fText('#fff', '11px', 'normal')}">${qtyRange(it.qtyLow, it.qtyHigh)} × ${it.name}${weightLabel} @ ${priceCell} = ${subCell}</span>`;
+                return `<span style="${fText(t.textPrimary, '11px', 'normal')}">${qtyRange(it.qtyLow, it.qtyHigh)} × ${it.name}${weightLabel} @ ${priceCell} = ${subCell}</span>`;
             }).join('<br>');
 
             const successDetail = hops > 1
                 ? `${(successRate * 100).toFixed(0)}%^${hops} × ${(spawnRate * 100).toFixed(0)}%^${hops - 1} = ${(successFactor * 100).toFixed(1)}% (every chain step succeeds and spawns)`
                 : `${(successFactor * 100).toFixed(1)}% (per-crime baseline)`;
 
-            const lblStyle = `${fText('#888', '10px', 'normal')} text-transform:uppercase; letter-spacing:0.04em; white-space:nowrap;`;
-            const valStyle = `${fText('#fff', '11px', 'normal')}`;
+            const lblStyle = `${fText(t.textMuted, '10px', 'normal')} text-transform:uppercase; letter-spacing:0.04em; white-space:nowrap;`;
+            const valStyle = `${fText(t.textPrimary, '11px', 'normal')}`;
 
             const detailRow = (label, value) =>
                 `<span style="${lblStyle}">${label}</span><span style="${valStyle}">${value}</span>`;
 
             const row = document.createElement('div');
             row.className = 'ev-display-final';
-            row.setAttribute('style', 'background:#000 !important; border:1px solid #37bcd6 !important; margin:4px 8px; padding:6px 10px; border-radius:3px; max-width:640px;');
+            row.setAttribute('style', `background:${t.bg} !important; border-top:1px solid ${t.border} !important; border-bottom:1px solid ${t.border} !important; padding:6px 10px; box-sizing:border-box; width:100%;`);
             row.innerHTML = `
                 <div class="ev-summary" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                    <span style="${fText('#37bcd6', '11px')}">${dailyLabel}:</span>
-                    <span style="${fText('#ffb300', '13px')}">${fmt(daily)}</span>
-                    <button type="button" class="ev-toggle" style="background:#111; color:#37bcd6; border:1px solid #37bcd6; width:18px; height:18px; line-height:1; border-radius:50%; cursor:pointer; padding:0; font-family: 'Courier New', monospace; font-weight:bold; font-size:11px; margin-left:auto;">?</button>
+                    <span style="${fText(t.accentCyan, '11px')}">${dailyLabel}:</span>
+                    <span style="${fText(t.accentAmber, '13px')}">${fmt(daily)}</span>
+                    <button type="button" class="ev-toggle" style="background:${t.buttonBg}; color:${t.accentCyan}; border:1px solid ${t.accentCyan}; width:18px; height:18px; line-height:1; border-radius:50%; cursor:pointer; padding:0; font-family: 'Courier New', monospace; font-weight:bold; font-size:11px; margin-left:auto;">?</button>
                 </div>
-                <div class="ev-details" style="display:none; border-top:1px solid #333; margin-top:6px; padding-top:6px;">
+                <div class="ev-details" style="display:none; border-top:1px solid ${t.divider}; margin-top:6px; padding-top:6px;">
                     <div style="display:grid; grid-template-columns: max-content 1fr; gap:3px 14px; align-items:baseline;">
                         ${detailRow('Crime', crimeLine)}
                         ${detailRow('Chain pool', chainPoolLine)}
@@ -696,11 +755,11 @@
                         ${detailRow('Faction cut', `${(factionRate * 100).toFixed(1)}% → ${fmtRange(factionLow, factionHigh)}`)}
                         ${detailRow('Success', successDetail)}
                         ${detailRow('After success', fmtRange(adjLow, adjHigh))}
-                        ${detailRow('Per slot', `${fmtRange(min, max)} <span style="color:#888">(÷ ${pool})</span>`)}
-                        <span style="${fText('#00ff00', '11px')}">AVG</span>
-                        <span style="${fText('#00ff00', '11px')}">${fmt(avg)}</span>
-                        <span style="${fText('#ffb300', '11px')}">DAILY</span>
-                        <span style="${fText('#ffb300', '11px')}">${fmt(daily)} <span style="color:#888; font-weight:normal">(÷ ${usingRemaining ? formatRemaining(remainingDays) + ' remaining' : config.days + 'd nominal'})</span></span>
+                        ${detailRow('Per slot', `${fmtRange(min, max)} <span style="color:${t.textMuted}">(÷ ${pool})</span>`)}
+                        <span style="${fText(t.accentGreen, '11px')}">AVG</span>
+                        <span style="${fText(t.accentGreen, '11px')}">${fmt(avg)}</span>
+                        <span style="${fText(t.accentAmber, '11px')}">DAILY</span>
+                        <span style="${fText(t.accentAmber, '11px')}">${fmt(daily)} <span style="color:${t.textMuted}; font-weight:normal">(÷ ${usingRemaining ? formatRemaining(remainingDays) + ' remaining' : config.days + 'd nominal'})</span></span>
                     </div>
                 </div>
             `;
