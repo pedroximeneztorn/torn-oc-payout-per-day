@@ -17,7 +17,6 @@
 
     // --- Configuration & data ---
     const CACHE_DURATION = 24 * 60 * 60 * 1000;
-    const CATEGORIES = ['Drug', 'Material', 'Special', 'Supply Pack'];
 
     // =====================================================================
     // TUNING — assumptions and placeholders we aren't fully sure of.
@@ -354,7 +353,7 @@
             return;
         }
         if (syncInFlight) {
-            // The in-flight batch captured the previous apiKey in its URLs, so
+            // The in-flight call captured the previous apiKey in its URL, so
             // a force-sync after a key change must run once it finishes.
             if (force) {
                 pendingForceSync = true;
@@ -374,73 +373,58 @@
 
         console.log('[OC] Syncing market prices via Torn API...');
         syncInFlight = true;
-        const merged = {};
-        let pending = CATEGORIES.length;
-        let failures = 0;
 
-        const finalize = () => {
+        const finishAndDrainQueue = () => {
             syncInFlight = false;
-            if (Object.keys(merged).length > 0) {
-                // Only stamp lastMarketSync when every category succeeded —
-                // partial failures should retry on the next page load instead
-                // of poisoning the cache for 24h.
-                const patch = { marketCache: { ...settings.marketCache, ...merged } };
-                if (failures === 0) patch.lastMarketSync = Date.now();
-                saveSettings(patch);
-                console.log(`[OC] Market cache updated (failures=${failures}), redrawing.`);
-                redrawStats();
-            } else {
-                console.log('[OC] Sync produced no data; cache unchanged.');
-            }
             if (pendingForceSync) {
                 pendingForceSync = false;
                 syncMarketPrices(true);
             }
         };
 
-        CATEGORIES.forEach(cat => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: `https://api.torn.com/v2/torn/items?key=${encodeURIComponent(settings.apiKey)}&cat=${encodeURIComponent(cat)}`,
-                onload: (res) => {
-                    try {
-                        const data = JSON.parse(res.responseText);
-                        if (data.error) {
-                            failures++;
-                            console.log(`[OC] API error for ${cat}:`, data.error);
-                        } else if (Array.isArray(data.items)) {
-                            data.items.forEach(i => {
-                                const v = i?.value;
-                                if (!v) return;
-                                // Treat 0/null as "no price" — some items have a
-                                // market_price of 0 because they're vendor-only,
-                                // and we want to fall back to sell rather than
-                                // value those at $0.
-                                const m = v.market_price;
-                                const s = v.sell_price;
-                                const market = typeof m === 'number' && m > 0 ? m : null;
-                                const sell = typeof s === 'number' && s > 0 ? s : null;
-                                if (market != null || sell != null) {
-                                    merged[i.id] = { market, sell };
-                                }
-                            });
-                            console.log(`[OC] Got ${data.items.length} items for ${cat}.`);
-                        } else {
-                            failures++;
-                            console.log(`[OC] Unexpected response shape for ${cat}.`);
-                        }
-                    } catch (e) {
-                        failures++;
-                        console.log(`[OC] Parse error for ${cat}:`, e);
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: `https://api.torn.com/v2/torn/items?key=${encodeURIComponent(settings.apiKey)}`,
+            onload: (res) => {
+                try {
+                    const data = JSON.parse(res.responseText);
+                    if (data.error) {
+                        console.log('[OC] API error:', data.error);
+                    } else if (Array.isArray(data.items)) {
+                        const next = {};
+                        data.items.forEach(i => {
+                            const v = i?.value;
+                            if (!v) return;
+                            // Treat 0/null as "no price" — some items have a
+                            // market_price of 0 because they're vendor-only,
+                            // so we want to fall back to sell rather than
+                            // value those at $0.
+                            const m = v.market_price;
+                            const s = v.sell_price;
+                            const market = typeof m === 'number' && m > 0 ? m : null;
+                            const sell = typeof s === 'number' && s > 0 ? s : null;
+                            if (market != null || sell != null) {
+                                next[i.id] = { market, sell };
+                            }
+                        });
+                        saveSettings({
+                            marketCache: next,
+                            lastMarketSync: Date.now(),
+                        });
+                        console.log(`[OC] Synced ${Object.keys(next).length} items, redrawing.`);
+                        redrawStats();
+                    } else {
+                        console.log('[OC] Unexpected response shape; cache unchanged.');
                     }
-                    if (--pending === 0) finalize();
-                },
-                onerror: (err) => {
-                    failures++;
-                    console.log(`[OC] HTTP error for ${cat}:`, err);
-                    if (--pending === 0) finalize();
-                },
-            });
+                } catch (e) {
+                    console.log('[OC] Parse error:', e);
+                }
+                finishAndDrainQueue();
+            },
+            onerror: (err) => {
+                console.log('[OC] HTTP error:', err);
+                finishAndDrainQueue();
+            },
         });
     }
 
