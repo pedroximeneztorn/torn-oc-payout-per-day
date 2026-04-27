@@ -46,7 +46,7 @@
         'Gaslight the Way':         { days: 6, slots: 6, payout: [3000000, 5000000] },
         'Snow Blind':               { days: 4, slots: 4, payout: [5575000, 10565000] },
         'Plucking the Lotus Petal': { days: 4, slots: 4, payout: [7000000, 9000000] },
-        'Stage Fright':             { days: 6, slots: 6, items: [{ id: 206, qty: [10, 30] }] },
+        'Stage Fright':             { days: 6, slots: 6, items: [{ id: 206, name: 'Xanax', qty: [10, 30] }] },
         'Guardian Angels':          { days: 3, slots: 3, payout: [10000000, 14000000] },
         'Honey Trap':               { days: 3, slots: 3, payout: [7000000, 11000000] },
         'Counter Offer':            { days: 5, slots: 5, payout: [12000000, 18000000] },
@@ -62,7 +62,7 @@
         'Ace in the Hole':          { days: 5, slots: 5, payout: [50000000, 60000000] },
         'Manifest Cruelty':         { days: 4, slots: 4, chainsTo: 'Gone Fission' },
         'Gone Fission':             { days: 5, slots: 5, chainsTo: 'Crane Reaction' },
-        'Crane Reaction':           { days: 6, slots: 6, items: [{ id: 370, qty: [2, 5] }] },
+        'Crane Reaction':           { days: 6, slots: 6, items: [{ id: 370, name: 'Cedar Wood', qty: [2, 5] }] },
     };
 
     // Lookup from a normalized title to the canonical OC_DATA key, used by
@@ -412,35 +412,62 @@
             const terminal = chainConfigs[chainConfigs.length - 1];
             if (!terminal) return;
 
-            let [low, high] = terminal.payout || [0, 0];
+            // --- Compute the breakdown step by step, keeping each intermediate
+            //     value so the details panel can show its work.
+
+            // 1. Raw payout from the terminal crime in the chain. Cash is
+            //    taken from terminal.payout; items are summed at current
+            //    market prices (per-item subtotals stashed for display).
+            const itemBreakdown = [];
+            let rawLow = 0;
+            let rawHigh = 0;
+            if (terminal.payout) {
+                rawLow = terminal.payout[0];
+                rawHigh = terminal.payout[1];
+            }
             if (terminal.items) {
                 terminal.items.forEach(it => {
-                    const price = market[it.id] || 0;
-                    low += price * it.qty[0];
-                    high += price * it.qty[1];
+                    const price = market[it.id];
+                    const itemLow = (price || 0) * it.qty[0];
+                    const itemHigh = (price || 0) * it.qty[1];
+                    rawLow += itemLow;
+                    rawHigh += itemHigh;
+                    itemBreakdown.push({
+                        id: it.id,
+                        name: it.name || `item #${it.id}`,
+                        qtyLow: it.qty[0],
+                        qtyHigh: it.qty[1],
+                        price,
+                        subtotalLow: itemLow,
+                        subtotalHigh: itemHigh,
+                    });
                 });
             }
 
-            // Pool: every slot in every crime in the chain shares one head.
+            // 2. Pool: every slot in every crime in the chain shares one head.
             const pool = chainConfigs.reduce((s, c) => s + (c.slots || 1), 0);
 
-            // Hops to terminal: each unfinished crime adds a SUCCESS_BASELINE
-            // factor since the chain only pays out if every step succeeds.
-            // Terminal = 1 hop (its own success); antecedent = 2; root of a
-            // 3-hop chain = 3.
+            // 3. Hops: each unfinished crime adds a SUCCESS_BASELINE factor
+            //    since the chain only pays out if every step succeeds.
+            //    Terminal = 1 hop (its own success); antecedent = 2; root of
+            //    a 3-hop chain = 3.
             const hops = chainConfigs.length - chainConfigs.findIndex(c => c === config);
             const successFactor = SUCCESS_BASELINE ** hops;
 
-            const calc = (val) => (val * successFactor * factionRate) / pool;
-            const min = calc(low);
-            const max = calc(high);
+            // 4. Apply faction cut, then success factor, then divide by pool.
+            const factionLow = rawLow * factionRate;
+            const factionHigh = rawHigh * factionRate;
+            const adjLow = factionLow * successFactor;
+            const adjHigh = factionHigh * successFactor;
+            const min = adjLow / pool;
+            const max = adjHigh / pool;
             const avg = (min + max) / 2;
 
-            // DAILY denominator depends on whether you can still join. Cards
-            // with a join button represent a real "if I take this slot now,
-            // here's my $/day until payout" decision — use the queue
-            // countdown. Cards without one are full and not actionable, so
-            // show the nominal-length rate for consistent comparison.
+            // 5. DAILY denominator depends on whether you can still join. Cards
+            //    with a join button represent a real "if I take this slot now,
+            //    here's my $/day until payout" decision — use the queue
+            //    countdown. Cards without one are full and not actionable, so
+            //    show the nominal-length rate for consistent comparison.
             const hasJoin = joinButtonClass && crime.querySelector(`.${joinButtonClass}`);
             const remainingDays = hasJoin ? parseRemainingDays(crime) : null;
             const usingRemaining = remainingDays != null && remainingDays > 0;
@@ -450,34 +477,64 @@
                 ? `DAILY (${formatRemaining(remainingDays)} left)`
                 : `DAILY (${config.days}d nominal)`;
 
-            const chainSummary = chainNames.length > 1
-                ? `${chainNames.join(' → ')} (${pool}-way pool)`
-                : `${pool}-way`;
+            // --- Assemble the details breakdown
+            const fmt = (n) => `$${Math.floor(n).toLocaleString()}`;
+            const fmtRange = (a, b) => `${fmt(a)} – ${fmt(b)}`;
+            const qtyRange = (a, b) => a === b ? `${a}` : `${a}–${b}`;
+
+            const chainPoolLine = chainNames.length > 1
+                ? chainNames.map((n, i) => `${n} (${chainConfigs[i].slots})`).join(' → ') + ` = ${pool} slots`
+                : `${pool} slots (${title}, standalone)`;
+
+            const crimeLine = chainNames.length > 1
+                ? `${title} — chain antecedent, ${hops - 1} hop${hops > 2 ? 's' : ''} to payout`
+                : title;
+
+            // Item rows: name, qty range, market price, subtotal range. If a
+            // price hasn't been cached yet, show "—" so the user can tell.
+            const itemRowsHtml = itemBreakdown.map(it => {
+                const priceCell = it.price != null ? fmt(it.price) : '<em style="color:#888">price not cached</em>';
+                const subCell = it.price != null ? fmtRange(it.subtotalLow, it.subtotalHigh) : '—';
+                return `<span style="${fText('#fff', '11px', 'normal')}">${qtyRange(it.qtyLow, it.qtyHigh)} × ${it.name} @ ${priceCell} = ${subCell}</span>`;
+            }).join('<br>');
+
+            const successDetail = hops > 1
+                ? `${(SUCCESS_BASELINE * 100).toFixed(0)}%^${hops} = ${(successFactor * 100).toFixed(1)}% (every chain step must succeed)`
+                : `${(successFactor * 100).toFixed(1)}% (assumed flat)`;
+
+            const lblStyle = `${fText('#888', '10px', 'normal')} text-transform:uppercase; letter-spacing:0.04em; white-space:nowrap;`;
+            const valStyle = `${fText('#fff', '11px', 'normal')}`;
+
+            const detailRow = (label, value) =>
+                `<span style="${lblStyle}">${label}</span><span style="${valStyle}">${value}</span>`;
 
             const row = document.createElement('div');
             row.className = 'ev-display-final';
-            row.setAttribute('style', 'background:#000 !important; border:1px solid #37bcd6 !important; margin:4px 8px; padding:6px 10px; border-radius:3px;');
+            row.setAttribute('style', 'background:#000 !important; border:1px solid #37bcd6 !important; margin:4px 8px; padding:6px 10px; border-radius:3px; max-width:640px;');
             row.innerHTML = `
-                <div class="ev-summary" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                    <span style="${fText('#37bcd6', '11px')}">${dailyLabel}</span>
-                    <span style="display:flex; align-items:center; gap:8px;">
-                        <span style="${fText('#ffb300', '13px')}">$${Math.floor(daily).toLocaleString()}</span>
-                        <button type="button" class="ev-toggle" style="background:#111; color:#37bcd6; border:1px solid #37bcd6; width:18px; height:18px; line-height:1; border-radius:50%; cursor:pointer; padding:0; font-family: 'Courier New', monospace; font-weight:bold; font-size:11px;">?</button>
-                    </span>
+                <div class="ev-summary" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <span style="${fText('#37bcd6', '11px')}">${dailyLabel}:</span>
+                    <span style="${fText('#ffb300', '13px')}">${fmt(daily)}</span>
+                    <button type="button" class="ev-toggle" style="background:#111; color:#37bcd6; border:1px solid #37bcd6; width:18px; height:18px; line-height:1; border-radius:50%; cursor:pointer; padding:0; font-family: 'Courier New', monospace; font-weight:bold; font-size:11px; margin-left:auto;">?</button>
                 </div>
                 <div class="ev-details" style="display:none; border-top:1px solid #333; margin-top:6px; padding-top:6px;">
-                    <div style="${fText('#37bcd6', '10px')} margin-bottom:4px;">EST. SHARE (${Math.round(factionRate * 100)}% faction cut · ${chainSummary} · ${(successFactor * 100).toFixed(1)}% success)</div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                        <span style="${fText('#ccc', '11px', 'normal')}">MIN:</span>
-                        <span style="${fText('#ffffff', '12px')}">$${Math.floor(min).toLocaleString()}</span>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                        <span style="${fText('#ccc', '11px', 'normal')}">MAX:</span>
-                        <span style="${fText('#ffffff', '12px')}">$${Math.floor(max).toLocaleString()}</span>
-                    </div>
-                    <div style="display:flex; justify-content:space-between;">
-                        <span style="${fText('#00ff00', '11px')}">AVG:</span>
-                        <span style="${fText('#00ff00', '12px')}">$${Math.floor(avg).toLocaleString()}</span>
+                    <div style="display:grid; grid-template-columns: max-content 1fr; gap:3px 14px; align-items:baseline;">
+                        ${detailRow('Crime', crimeLine)}
+                        ${detailRow('Chain pool', chainPoolLine)}
+                        ${terminal.payout ? detailRow(
+                            chainNames.length > 1 ? `Terminal cash` : 'Raw payout',
+                            `${fmtRange(terminal.payout[0], terminal.payout[1])}${chainNames.length > 1 ? ` (from ${chainNames[chainNames.length - 1]})` : ''}`,
+                        ) : ''}
+                        ${terminal.items ? detailRow('Items', itemRowsHtml) : ''}
+                        ${terminal.items ? detailRow('Raw value', fmtRange(rawLow, rawHigh)) : ''}
+                        ${detailRow('Faction cut', `${(factionRate * 100).toFixed(1)}% → ${fmtRange(factionLow, factionHigh)}`)}
+                        ${detailRow('Success', successDetail)}
+                        ${detailRow('After success', fmtRange(adjLow, adjHigh))}
+                        ${detailRow('Per slot', `${fmtRange(min, max)} <span style="color:#888">(÷ ${pool})</span>`)}
+                        <span style="${fText('#00ff00', '11px')}">AVG</span>
+                        <span style="${fText('#00ff00', '11px')}">${fmt(avg)}</span>
+                        <span style="${fText('#ffb300', '11px')}">DAILY</span>
+                        <span style="${fText('#ffb300', '11px')}">${fmt(daily)} <span style="color:#888; font-weight:normal">(÷ ${usingRemaining ? formatRemaining(remainingDays) + ' remaining' : config.days + 'd nominal'})</span></span>
                     </div>
                 </div>
             `;
