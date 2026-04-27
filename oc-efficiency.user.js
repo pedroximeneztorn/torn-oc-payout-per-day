@@ -432,29 +432,103 @@
     function injectControlPanel() {
         if (document.getElementById('oc-persistent-panel')) return;
 
-        const t = currentTheme();
-        const btnStyle = `width:100%; background:${t.buttonBg}; color:${t.textPrimary}; border:1px solid ${t.buttonBorder}; padding:5px; margin-bottom:5px; cursor:pointer;`;
+        // Anchor directly under the Recruiting / Planning / Completed tab
+        // bar — that's `buttonsContainer___xxx` in Torn's DOM. We insert as
+        // a sibling immediately after it.
+        const tabsClass = findClass('buttonsContainer');
+        const tabsEl = tabsClass ? document.querySelector(`.${tabsClass}`) : null;
+        if (!tabsEl?.parentElement) return;
 
-        const noticeHtml = settings.apiKey ? '' : `
-            <div style="${fText(t.accentAmber, '10px', 'normal')} background:${t.noticeBg} !important; border:1px solid ${t.noticeBorder} !important; padding:6px; margin-bottom:8px; line-height:1.35;">
-                Add a Torn API key to fetch market prices for item-reward crimes (Stage Fright, Crane Reaction, Gone Fission). Cash-reward crimes work without one.
-            </div>
+        const t = currentTheme();
+        const noKey = !settings.apiKey;
+
+        // Eye-catching when no key is set: amber, thicker border, opens by
+        // default. Otherwise blends in with the existing card UI.
+        const borderColor = noKey ? t.accentAmber : t.border;
+        const borderWidth = noKey ? '2px' : '1px';
+        const headerColor = noKey ? t.accentAmber : t.accentCyan;
+        const headerWeight = noKey ? 'bold' : 'normal';
+
+        const btnStyle = `
+            background:${t.buttonBg};
+            color:${t.textPrimary};
+            border:1px solid ${t.buttonBorder};
+            padding:4px 10px;
+            cursor:pointer;
+            font-family: 'Courier New', monospace;
+            font-size:11px;
         `;
+
+        const apiBtnAccent = noKey
+            ? ` background:${t.accentAmber}; color:#000; border-color:${t.accentAmber}; font-weight:bold;`
+            : '';
 
         const panel = document.createElement('div');
         panel.id = 'oc-persistent-panel';
-        panel.setAttribute('style', `position:fixed; bottom:20px; left:20px; z-index:999999; background:${t.bg} !important; border:2px solid ${t.border} !important; padding:12px; width:220px; box-shadow: 5px 5px 20px rgba(0,0,0,0.5);`);
+        panel.className = 'ev-display-final';
+        panel.setAttribute('style', `
+            background:${t.bg};
+            border:${borderWidth} solid ${borderColor};
+            margin:8px 0;
+            border-radius:3px;
+            box-sizing:border-box;
+        `);
+        panel.dataset.expanded = noKey ? 'true' : 'false';
         panel.innerHTML = `
-            <div style="${fText(t.accentCyan, '11px')} border-bottom:1px solid ${t.border}; margin-bottom:8px;">OC EFFICIENCY</div>
-            ${noticeHtml}
-            <div style="${fText(t.textPrimary, '12px')} margin-bottom:4px;">CURRENT CUT: <span id="oc-cut-display" style="color:${t.accentGreen} !important;">${settings.factionPayout}%</span></div>
-            <div style="${fText(t.textPrimary, '12px')} margin-bottom:10px;">SUCCESS BASELINE: <span id="oc-success-display" style="color:${t.accentGreen} !important;">${settings.successBaseline}%</span></div>
-            <button id="oc-btn-payout" style="${btnStyle}">Adjust Payout %</button>
-            <button id="oc-btn-success" style="${btnStyle}">Adjust Success %</button>
-            <button id="oc-btn-sync" style="${btnStyle}">Force Market Sync</button>
-            <button id="oc-btn-api" style="${btnStyle.replace('margin-bottom:5px;', '')}">${settings.apiKey ? 'Update API Key' : 'Set API Key'}</button>
+            <div class="oc-toggle" role="button" tabindex="0" style="
+                cursor:pointer;
+                padding:8px 12px;
+                user-select:none;
+                display:flex;
+                align-items:center;
+                gap:8px;
+                ${fText(headerColor, '12px', headerWeight)}
+            ">
+                <span class="oc-chevron" style="display:inline-block; width:10px;">${noKey ? '▼' : '▶'}</span>
+                <span>${noKey ? '⚠ OC Efficiency — API key needed' : 'OC Efficiency settings'}</span>
+            </div>
+            <div class="oc-body" style="
+                display:${noKey ? 'block' : 'none'};
+                padding:8px 12px 10px;
+                border-top:1px solid ${t.divider};
+            ">
+                ${noKey ? `
+                    <div style="${fText(t.textPrimary, '11px', 'normal')} margin-bottom:10px; line-height:1.4;">
+                        Add a Torn API key so the script can fetch market and sell prices for item-reward crimes (Stage Fright, Window of Opportunity, Crane Reaction, etc.). Cash-reward crimes work without one.
+                    </div>
+                ` : ''}
+                <div style="display:grid; grid-template-columns: max-content 1fr; gap:4px 10px; align-items:baseline; margin-bottom:8px;">
+                    <span style="${fText(t.textMuted, '11px', 'normal')}">Faction payout</span>
+                    <span style="${fText(t.accentGreen, '11px')}"><span id="oc-cut-display">${settings.factionPayout}%</span></span>
+                    <span style="${fText(t.textMuted, '11px', 'normal')}">Success baseline</span>
+                    <span style="${fText(t.accentGreen, '11px')}"><span id="oc-success-display">${settings.successBaseline}%</span></span>
+                </div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button id="oc-btn-api" style="${btnStyle}${apiBtnAccent}">${settings.apiKey ? 'Update API key' : 'Set API key'}</button>
+                    <button id="oc-btn-payout" style="${btnStyle}">Adjust payout %</button>
+                    <button id="oc-btn-success" style="${btnStyle}">Adjust success %</button>
+                    <button id="oc-btn-sync" style="${btnStyle}">Force market sync</button>
+                </div>
+            </div>
         `;
-        document.body.appendChild(panel);
+        tabsEl.parentElement.insertBefore(panel, tabsEl.nextElementSibling);
+
+        const toggleEl = panel.querySelector('.oc-toggle');
+        const bodyEl = panel.querySelector('.oc-body');
+        const chevronEl = panel.querySelector('.oc-chevron');
+        const togglePanel = () => {
+            const open = bodyEl.style.display !== 'none';
+            bodyEl.style.display = open ? 'none' : 'block';
+            chevronEl.textContent = open ? '▶' : '▼';
+            panel.dataset.expanded = open ? 'false' : 'true';
+        };
+        toggleEl.addEventListener('click', togglePanel);
+        toggleEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                togglePanel();
+            }
+        });
 
         document.getElementById('oc-btn-payout').onclick = promptPayout;
         document.getElementById('oc-btn-success').onclick = promptSuccessBaseline;
