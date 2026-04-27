@@ -216,12 +216,14 @@
         const baseline = Number(s.successBaseline);
         const sync = Number(s.lastMarketSync);
         // Cache values used to be raw numbers (market price only). They're
-        // now {market, sell} objects — wipe legacy entries so we resync.
+        // now {market, sell} objects — wipe entries that don't match the new
+        // shape so we resync. Validate every entry rather than just the
+        // first, in case storage is mixed-format from a partial migration.
         let marketCache = s.marketCache && typeof s.marketCache === 'object' ? s.marketCache : {};
-        const sample = Object.values(marketCache)[0];
-        if (sample !== undefined && (typeof sample !== 'object' || sample === null)) {
-            marketCache = {};
-        }
+        const hasInvalid = Object.values(marketCache).some(
+            v => v == null || typeof v !== 'object' || Array.isArray(v),
+        );
+        if (hasInvalid) marketCache = {};
         return {
             apiKey: typeof s.apiKey === 'string' ? s.apiKey : DEFAULT_SETTINGS.apiKey,
             factionPayout: Number.isFinite(payout) ? payout : DEFAULT_SETTINGS.factionPayout,
