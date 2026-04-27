@@ -1,9 +1,10 @@
 // ==UserScript==
-// @name         Torn OC 2.0 Efficiency
+// @name         Torn OC 2.0 Daily Payout
 // @namespace    http://tampermonkey.net/
-// @version      4.0
+// @version      0.01
 // @description  Estimates min/max/avg/daily payout per slot for OC 2.0 crimes, with a 24h API price cache.
 // @author       rem4rk
+// @author       PedroXimenez
 // @license      MIT
 // @match        https://*.torn.com/factions.php*
 // @grant        GM_setValue
