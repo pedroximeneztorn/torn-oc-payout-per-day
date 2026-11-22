@@ -28,6 +28,8 @@ The settings panel sits under the OC tabs. The same options are in the Tampermon
 
 ## Credits
 
+rem4rk helped with the first version of this: see his [forum post](https://www.torn.com/forums.php#/p=threads&f=67&t=16559708&b=0&a=0&start=0&to=28102147) and his original [OC Efficiency script on Greasy Fork](https://greasyfork.org/en/scripts/575734-oc-efficiency-calculate-expected-value-daily-payouts-stop-guessing-start-optimizing). As he's been Fedded, I guess I Am The Captain Now.
+
 Cash payout figures come from the crowdsourced outcome data in [Torn OC Scenario Tracker](https://www.torn.com/forums.php#/p=threads&f=67&t=16458267&b=0&a=0) by Allenone [2033011]. Scenario lengths, slots and item drops come from the Torn wiki's Organized Crime 2.0 page.
 
 ## License
