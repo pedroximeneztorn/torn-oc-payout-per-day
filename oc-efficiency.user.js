@@ -349,6 +349,44 @@
     let syncInFlight = false;
     let pendingForceSync = false;
 
+    // Persisted across re-renders so the user's collapse state survives
+    // settings changes that re-inject the panel. Defaults closed; the
+    // no-API-key state forces it open in injectControlPanel anyway.
+    let panelExpanded = false;
+
+    function formatRelativeTime(ts) {
+        if (!ts || typeof ts !== 'number') return 'never';
+        const ms = Date.now() - ts;
+        if (ms < 60_000) return 'just now';
+        if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
+        if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
+        return `${Math.floor(ms / 86_400_000)}d ago`;
+    }
+
+    function maskApiKey(key) {
+        if (!key) return 'none';
+        return key.length <= 3 ? key : `…${key.slice(-3)}`;
+    }
+
+    // Brief amber background flash to confirm a setting save in place. Used
+    // when we want to show "saved" without re-rendering the panel.
+    function flashSaved(el) {
+        if (!el) return;
+        const prev = { bg: el.style.backgroundColor, transition: el.style.transition, padding: el.style.padding, radius: el.style.borderRadius };
+        el.style.transition = 'background-color 0.18s ease';
+        el.style.backgroundColor = 'rgba(255, 179, 0, 0.55)';
+        el.style.padding = '0 4px';
+        el.style.borderRadius = '2px';
+        setTimeout(() => {
+            el.style.backgroundColor = prev.bg;
+            setTimeout(() => {
+                el.style.transition = prev.transition;
+                el.style.padding = prev.padding;
+                el.style.borderRadius = prev.radius;
+            }, 220);
+        }, 450);
+    }
+
     function syncMarketPrices(force = false) {
         if (!settings.apiKey) {
             console.log('[OC] No API key — skipping sync.');
@@ -413,6 +451,11 @@
                             marketCache: next,
                             lastMarketSync: Date.now(),
                         });
+                        const lastSyncEl = document.getElementById('oc-last-sync');
+                        if (lastSyncEl) {
+                            lastSyncEl.textContent = formatRelativeTime(settings.lastMarketSync);
+                            flashSaved(lastSyncEl);
+                        }
                         console.log(`[OC] Synced ${Object.keys(next).length} items, redrawing.`);
                         redrawStats();
                     } else {
@@ -465,9 +508,13 @@
             ? ` background:${t.accentAmber}; color:#000; border-color:${t.accentAmber}; font-weight:bold;`
             : '';
 
+        // No-API-key state forces open; otherwise honour the persisted
+        // `panelExpanded` toggle state so settings changes don't snap the
+        // panel shut.
+        const initiallyOpen = noKey || panelExpanded;
+
         const panel = document.createElement('div');
         panel.id = 'oc-persistent-panel';
-        panel.className = 'ev-display-final';
         panel.setAttribute('style', `
             background:${t.bg};
             border:${borderWidth} solid ${borderColor};
@@ -475,7 +522,6 @@
             border-radius:3px;
             box-sizing:border-box;
         `);
-        panel.dataset.expanded = noKey ? 'true' : 'false';
         panel.innerHTML = `
             <div class="oc-toggle" role="button" tabindex="0" style="
                 cursor:pointer;
@@ -486,11 +532,14 @@
                 gap:8px;
                 ${fText(headerColor, '12px', headerWeight)}
             ">
-                <span class="oc-chevron" style="display:inline-block; width:10px;">${noKey ? '▼' : '▶'}</span>
-                <span>${noKey ? '⚠ OC Efficiency — API key needed' : 'OC Efficiency settings'}</span>
+                <span class="oc-chevron" style="display:inline-block; width:10px;">${initiallyOpen ? '▼' : '▶'}</span>
+                <span style="flex:1;">${noKey ? '⚠ OC Efficiency — API key needed' : 'OC Efficiency settings'}</span>
+                <span class="oc-toggle-summary" style="${fText(t.textMuted, '11px', 'normal')} display:${initiallyOpen ? 'none' : 'inline'};">
+                    <span id="oc-cut-summary" style="color:${t.accentGreen};">${settings.factionPayout}%</span> cut · <span id="oc-success-summary" style="color:${t.accentGreen};">${settings.successBaseline}%</span> success
+                </span>
             </div>
             <div class="oc-body" style="
-                display:${noKey ? 'block' : 'none'};
+                display:${initiallyOpen ? 'block' : 'none'};
                 padding:8px 12px 10px;
                 border-top:1px solid ${t.divider};
             ">
@@ -504,6 +553,12 @@
                     <span style="${fText(t.accentGreen, '11px')}"><span id="oc-cut-display">${settings.factionPayout}%</span></span>
                     <span style="${fText(t.textMuted, '11px', 'normal')}">Success baseline</span>
                     <span style="${fText(t.accentGreen, '11px')}"><span id="oc-success-display">${settings.successBaseline}%</span></span>
+                    ${settings.apiKey ? `
+                        <span style="${fText(t.textMuted, '11px', 'normal')}">API key</span>
+                        <span style="${fText(t.textPrimary, '11px', 'normal')}"><span id="oc-api-key-display">${maskApiKey(settings.apiKey)}</span></span>
+                    ` : ''}
+                    <span style="${fText(t.textMuted, '11px', 'normal')}">Last market sync</span>
+                    <span style="${fText(t.textPrimary, '11px', 'normal')}"><span id="oc-last-sync">${formatRelativeTime(settings.lastMarketSync)}</span></span>
                 </div>
                 <div style="display:flex; gap:6px; flex-wrap:wrap;">
                     <button id="oc-btn-api" style="${btnStyle}${apiBtnAccent}">${settings.apiKey ? 'Update API key' : 'Set API key'}</button>
@@ -518,11 +573,14 @@
         const toggleEl = panel.querySelector('.oc-toggle');
         const bodyEl = panel.querySelector('.oc-body');
         const chevronEl = panel.querySelector('.oc-chevron');
+        const summaryEl = panel.querySelector('.oc-toggle-summary');
         const togglePanel = () => {
-            const open = bodyEl.style.display !== 'none';
-            bodyEl.style.display = open ? 'none' : 'block';
-            chevronEl.textContent = open ? '▶' : '▼';
-            panel.dataset.expanded = open ? 'false' : 'true';
+            const wasOpen = bodyEl.style.display !== 'none';
+            const nowOpen = !wasOpen;
+            bodyEl.style.display = nowOpen ? 'block' : 'none';
+            chevronEl.textContent = nowOpen ? '▼' : '▶';
+            summaryEl.style.display = nowOpen ? 'none' : 'inline';
+            panelExpanded = nowOpen;
         };
         toggleEl.addEventListener('click', togglePanel);
         toggleEl.addEventListener('keydown', (e) => {
@@ -544,8 +602,12 @@
         const num = parseFloat(v);
         if (Number.isFinite(num) && num >= 0 && num <= 100) {
             saveSettings({ factionPayout: num });
-            const display = document.getElementById('oc-cut-display');
-            if (display) display.textContent = `${num}%`;
+            const body = document.getElementById('oc-cut-display');
+            const summary = document.getElementById('oc-cut-summary');
+            if (body) body.textContent = `${num}%`;
+            if (summary) summary.textContent = `${num}%`;
+            flashSaved(body);
+            flashSaved(summary);
             redrawStats();
         }
     }
@@ -559,8 +621,12 @@
         const num = parseFloat(v);
         if (Number.isFinite(num) && num >= 0 && num <= 100) {
             saveSettings({ successBaseline: num });
-            const display = document.getElementById('oc-success-display');
-            if (display) display.textContent = `${num}%`;
+            const body = document.getElementById('oc-success-display');
+            const summary = document.getElementById('oc-success-summary');
+            if (body) body.textContent = `${num}%`;
+            if (summary) summary.textContent = `${num}%`;
+            flashSaved(body);
+            flashSaved(summary);
             redrawStats();
         }
     }
@@ -574,10 +640,16 @@
         const trimmed = v.trim();
         if (trimmed) {
             saveSettings({ apiKey: trimmed });
-            // Re-inject so the notice and button label update.
+            // Re-inject so the no-key warning state and button styling update.
+            // Keep the panel visible after a key save — it's a meaningful
+            // change worth showing.
+            panelExpanded = true;
             document.getElementById('oc-persistent-panel')?.remove();
             syncMarketPrices(true);
             scheduleUpdate(true);
+            // Flash the new API key indicator once the rebuilt panel is in
+            // the DOM (scheduleUpdate runs via RAF; a short delay is enough).
+            setTimeout(() => flashSaved(document.getElementById('oc-api-key-display')), 80);
         }
     }
 
@@ -800,6 +872,7 @@
                 <div class="ev-summary" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
                     <span style="${fText(t.accentCyan, '11px')}">${dailyLabel}:</span>
                     <span style="${fText(t.accentAmber, '13px')}">${fmt(daily)}</span>
+                    <span style="${fText(t.textMuted, '10px', 'normal')}">(${fmt(avg)} total)</span>
                     <button type="button" class="ev-toggle" style="background:${t.buttonBg}; color:${t.accentCyan}; border:1px solid ${t.accentCyan}; width:18px; height:18px; line-height:1; border-radius:50%; cursor:pointer; padding:0; font-family: 'Courier New', monospace; font-weight:bold; font-size:11px; margin-left:auto;">?</button>
                 </div>
                 <div class="ev-details" style="display:none; border-top:1px solid ${t.divider}; margin-top:6px; padding-top:6px;">
