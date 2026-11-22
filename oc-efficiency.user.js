@@ -57,7 +57,15 @@
     // chain. So a No Reserve participant and a Bidding War participant get
     // the same per-head share of Bidding War's cash.
     //
-    // Cash payouts here are calibrated against the Torncity wiki
+    // Cash payouts (`payout` range + `payoutAvg`) come from crowdsourced
+    // outcome data collected by "Torn OC Scenario Tracker" by Allenone
+    // [2033011] — https://www.torn.com/forums.php#/p=threads&f=67&t=16458267&b=0&a=0
+    // — as charted on tornprobability.com (Nov 2026 snapshot): min/max over
+    // every recorded *successful* outcome, and `payoutAvg` weighted by how
+    // often each outcome was seen. Failure outcomes are barely recorded
+    // there, so success odds still come from the user's success baseline.
+    // Where `payoutAvg` is absent the midpoint of the range is used. The
+    // Torncity wiki remains the source for lengths, slots and item drops.
     //
     // Items are valued at market price by default — the game pays out the
     // market value of items as cash when a faction picks the cash-equivalent
@@ -75,11 +83,12 @@
             { id: 68,  name: 'Small First Aid Kit',     qty: [2, 2], weight: 0.5 },
             { id: 67,  name: 'First Aid Kit',           qty: [3, 4], weight: 0.5 },
         ] },
-        'Mob Mentality':            { days: 4, slots: 4, payout: [673000, 1500000] },
-        'Pet Project':              { days: 3, slots: 3, payout: [414000, 806000] },
-        // Wiki leaves min/max as ??? — values here are a rough guess.
-        'Thou Shalt Not Steal':     { days: 3, slots: 3, payout: [1000000, 2000000] }, // TODO: Wiki unknown
-        'Cash Me If You Can':       { days: 3, slots: 3, payout: [829000, 1601000] },
+        'Mob Mentality':            { days: 4, slots: 4, payout: [512_000, 1_440_000], payoutAvg: 1_077_408 },
+        'Pet Project':              { days: 3, slots: 3, payout: [406_000, 810_000], payoutAvg: 665_598 },
+        // tornprobability chart still marked in-progress for this one.
+        'Thou Shalt Not Steal':     { days: 3, slots: 3, payout: [687_000, 1_358_000], payoutAvg: 1_208_132 },
+        'Disorderly Conduct':       { days: 4, slots: 4, payout: [968_000, 1_988_000], payoutAvg: 1_643_880 },
+        'Cash Me If You Can':       { days: 3, slots: 3, payout: [811_000, 1_616_000], payoutAvg: 1_436_838 },
         'Best of the Lot':          { days: 4, slots: 4, items: [
             // Single-item drop, 1/3 each.
             { id: 523, name: 'Mercia SLR', qty: [1, 1], weight: 1 / 3 },
@@ -92,7 +101,7 @@
             { id: 517, name: 'Weston Marlin 177',  qty: [1, 1], weight: 1 / 3 },
             { id: 521, name: 'Lambrini Torobravo', qty: [1, 1], weight: 1 / 3 },
         ] },
-        'Market Forces':            { days: 5, slots: 5, payout: [5095000, 8575000] },
+        'Market Forces':            { days: 5, slots: 5, payout: [4_385_000, 8_748_000], payoutAvg: 7_502_553 },
         'Gaslight the Way':         { days: 6, slots: 6, items: [
             // Wiki lists 5 possible items with no quantity — assume 1 of one,
             // uniformly distributed.
@@ -102,23 +111,26 @@
             { id: 985, name: 'Can of Goose Juice',  qty: [1, 1], weight: 1 / 5 },
             { id: 151, name: 'Pixie Sticks',        qty: [1, 1], weight: 1 / 5 },
         ] },
-        'Snow Blind':               { days: 4, slots: 4, payout: [5575000, 10565000] },
-        // Wiki gives only the max ($8,976,000) — min still unknown.
-        'Plucking the Lotus Petal': { days: 4, slots: 4, payout: [7000000, 8976000] }, // TODO: Wiki min unknown
+        'Snow Blind':               { days: 4, slots: 4, payout: [5_492_000, 10_640_000], payoutAvg: 9_745_626 },
+        'Plucking the Lotus Petal': { days: 4, slots: 4, payout: [4_675_000, 9_294_000], payoutAvg: 8_265_514 },
         'Stage Fright':             { days: 6, slots: 6, items: [
             { id: 206, name: 'Xanax', qty: [10, 30] },
         ] },
-        'Guardian Angels':          { days: 3, slots: 3, payout: [6296000, 8883000] },
-        'Honey Trap':               { days: 3, slots: 3, payout: [15753000, 25671000] },
+        'Guardian Angels':          { days: 3, slots: 3, payout: [4_501_000, 9_000_000], payoutAvg: 7_401_061 },
+        // Honey Trap / Leave No Trace swapped tiers in Jan 2026 (patch #418);
+        // the wiki's cash figures for the two are still pre-swap.
+        'Honey Trap':               { days: 3, slots: 3, payout: [6_751_000, 13_500_000], payoutAvg: 10_975_206 },
         // Wiki doesn't enumerate Counter Offer items but says the reward
         // uses sell value (not market). Without an item list we keep a
         // coarse cash placeholder; Wiki estimates the total at ≥$24M.
         'Counter Offer':            { days: 5, slots: 5, payout: [24000000, 40000000] }, // TODO: items not enumerated; cash placeholder
         'No Reserve':               { days: 3, slots: 3, chainsTo: 'Bidding War' },
-        'Bidding War':              { days: 6, slots: 6, payout: [71291000, 133980000] },
-        'Leave No Trace':           { days: 3, slots: 3, payout: [9660000, 13474000] },
-        'Sneaky Git Grab':          { days: 4, slots: 4, payout: [21384000, 38757000] },
-        'Blast from the Past':      { days: 6, slots: 6, payout: [98046000, 202382000] },
+        'Bidding War':              { days: 6, slots: 6, payout: [70_840_000, 133_999_000], payoutAvg: 108_250_084 },
+        'Leave No Trace':           { days: 3, slots: 3, payout: [13_501_000, 26_999_000], payoutAvg: 22_772_185 },
+        // tornprobability chart still marked in-progress for this one.
+        'Dish It Out':              { days: 5, slots: 5, payout: [24_751_000, 49_498_000], payoutAvg: 40_610_657 },
+        'Sneaky Git Grab':          { days: 4, slots: 4, payout: [19_753_000, 39_499_000], payoutAvg: 33_728_763 },
+        'Blast from the Past':      { days: 6, slots: 6, payout: [95_868_000, 215_676_000], payoutAvg: 152_696_631 },
         'Window of Opportunity':    { days: 5, slots: 5, items: (() => {
             // Primary: 1× Painting OR 1× Cutlass, 50/50.
             // Secondary group: Wiki says "additional possibility of" one of
@@ -136,7 +148,8 @@
                 { id: 538,  name: 'Medieval Helmet',            qty: [4, 4], weight: sec },
             ];
         })() },
-        'Break the Bank':           { days: 6, slots: 6, payout: [195135000, 395980000] },
+        'Cleared for Takeoff':      { days: 6, slots: 6, payout: [105_387_000, 209_999_000], payoutAvg: 175_260_757 },
+        'Break the Bank':           { days: 6, slots: 6, payout: [195_103_000, 395_996_000], payoutAvg: 309_535_110 },
         'Ship Happens':             { days: 5, slots: 5, items: [
             // Single-item drop, assumed 1/3 each. Vendor-only (market price
             // 0), so these value at their Jewelry Store sell price.
@@ -144,9 +157,9 @@
             { id: 1556, name: 'Emerald Plastron',      qty: [1, 1], weight: 1 / 3 },
             { id: 1555, name: 'Alexandrite Manchette', qty: [1, 1], weight: 1 / 3 },
         ] },
-        'Clinical Precision':       { days: 4, slots: 4, payout: [61363000, 122565000] },
+        'Clinical Precision':       { days: 4, slots: 4, payout: [61_317_000, 122_600_000], payoutAvg: 102_566_000 },
         'Stacking the Deck':        { days: 4, slots: 4, chainsTo: 'Ace in the Hole' },
-        'Ace in the Hole':          { days: 5, slots: 5, payout: [280005000, 579919000] },
+        'Ace in the Hole':          { days: 5, slots: 5, payout: [280_005_000, 579_998_000], payoutAvg: 464_950_945 },
         'Manifest Cruelty':         { days: 4, slots: 4, chainsTo: 'Gone Fission' },
         'Gone Fission':             { days: 5, slots: 5, chainsTo: 'Crane Reaction' },
         'Crane Reaction':           { days: 6, slots: 6, items: [
@@ -156,14 +169,7 @@
             { id: 336, name: 'Cesium-137', qty: [1, 3], priceFallback: ASSUMPTIONS.cesium137FallbackValue },
         ] },
         'Lock Stock':               { days: 5, slots: 5, chainsTo: 'Hostile Takeover' },
-        'Hostile Takeover':         { days: 6, slots: 6, payout: [511000000, 872025000] },
-
-        // Known scenarios deliberately left out until the wiki has any reward
-        // data — an entry with no payout would render as $0, which is worse
-        // than showing nothing:
-        //   Disorderly Conduct   (L2, 4 days, 4 slots)
-        //   Dish It Out          (L6, 5 days, 5 slots)
-        //   Cleared for Takeoff  (L7, 6 days, 6 slots)
+        'Hostile Takeover':         { days: 6, slots: 6, payout: [481_775_000, 874_913_000], payoutAvg: 703_251_123 },
     };
 
     // Lookup from a normalized title to the canonical OC_DATA key, used by
@@ -821,7 +827,12 @@
             const adjHigh = factionHigh * successFactor;
             const min = adjLow / pool;
             const max = adjHigh / pool;
-            const avg = (min + max) / 2;
+            // Observed average when we have one (cash-only crimes); payouts
+            // skew towards the top of the range, so the midpoint undersells.
+            const useObservedAvg = terminal.payoutAvg != null && !terminal.items;
+            const avg = useObservedAvg
+                ? terminal.payoutAvg * factionRate * successFactor / pool
+                : (min + max) / 2;
 
             // 5. DAILY denominator depends on whether you can still join. Cards
             //    with a join button represent a real "if I take this slot now,
@@ -846,9 +857,11 @@
                 ? chainNames.map((n, i) => `${n} (${chainConfigs[i].slots})`).join(' → ') + ` = ${pool} slots`
                 : `${pool} slots (${title}, standalone)`;
 
-            const crimeLine = chainNames.length > 1
-                ? `${title} — chain antecedent, ${hops - 1} hop${hops > 2 ? 's' : ''} to payout`
-                : title;
+            const crimeLine = chainNames.length === 1
+                ? title
+                : hops === 1
+                    ? `${title} — chain payout (final step)`
+                    : `${title} — chain antecedent, ${hops - 1} hop${hops > 2 ? 's' : ''} to payout`;
 
             // Item rows: name, qty range, price (market or sell), optional
             // chance weight, and weighted subtotal range. Items with no
@@ -898,7 +911,7 @@
                         ${detailRow('Chain pool', chainPoolLine)}
                         ${terminal.payout ? detailRow(
                             chainNames.length > 1 ? `Terminal cash` : 'Raw payout',
-                            `${fmtRange(terminal.payout[0], terminal.payout[1])}${chainNames.length > 1 ? ` (from ${chainNames[chainNames.length - 1]})` : ''}`,
+                            `${fmtRange(terminal.payout[0], terminal.payout[1])}${terminal.payoutAvg != null ? `, avg ${fmt(terminal.payoutAvg)}` : ''}${chainNames.length > 1 ? ` (from ${chainNames[chainNames.length - 1]})` : ''}`,
                         ) : ''}
                         ${terminal.items ? detailRow(`Items (${valuation} value)`, itemRowsHtml) : ''}
                         ${terminal.items ? detailRow('Raw value', fmtRange(rawLow, rawHigh)) : ''}
