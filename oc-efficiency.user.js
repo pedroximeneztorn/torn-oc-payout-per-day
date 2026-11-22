@@ -118,7 +118,7 @@
         'Bidding War':              { days: 6, slots: 6, payout: [71291000, 133980000] },
         'Leave No Trace':           { days: 3, slots: 3, payout: [9660000, 13474000] },
         'Sneaky Git Grab':          { days: 4, slots: 4, payout: [21384000, 38757000] },
-        'Blast from the Past':      { days: 6, slots: 6, payout: [98321000, 202382000] },
+        'Blast from the Past':      { days: 6, slots: 6, payout: [98046000, 202382000] },
         'Window of Opportunity':    { days: 5, slots: 5, items: (() => {
             // Primary: 1× Painting OR 1× Cutlass, 50/50.
             // Secondary group: Wiki says "additional possibility of" one of
@@ -137,6 +137,14 @@
             ];
         })() },
         'Break the Bank':           { days: 6, slots: 6, payout: [195135000, 395980000] },
+        'Ship Happens':             { days: 5, slots: 5, items: [
+            // Single-item drop, assumed 1/3 each. These items post-date our
+            // item.json snapshot, so we don't have their ids yet; the wiki's
+            // Jewelry Store sell prices stand in as priceFallback.
+            { id: null, name: 'Ruby Brooch',           qty: [1, 1], weight: 1 / 3, priceFallback: 130_000_000 }, // TODO: item id
+            { id: null, name: 'Emerald Plastron',      qty: [1, 1], weight: 1 / 3, priceFallback: 70_000_000 },  // TODO: item id
+            { id: null, name: 'Alexandrite Manchette', qty: [1, 1], weight: 1 / 3, priceFallback: 30_000_000 },  // TODO: item id
+        ] },
         'Clinical Precision':       { days: 4, slots: 4, payout: [61363000, 122565000] },
         'Stacking the Deck':        { days: 4, slots: 4, chainsTo: 'Ace in the Hole' },
         'Ace in the Hole':          { days: 5, slots: 5, payout: [280005000, 579919000] },
@@ -148,6 +156,15 @@
             // the item starts trading.
             { id: 336, name: 'Cesium-137', qty: [1, 3], priceFallback: ASSUMPTIONS.cesium137FallbackValue },
         ] },
+        'Lock Stock':               { days: 5, slots: 5, chainsTo: 'Hostile Takeover' },
+        'Hostile Takeover':         { days: 6, slots: 6, payout: [511000000, 872025000] },
+
+        // Known scenarios deliberately left out until the wiki has any reward
+        // data — an entry with no payout would render as $0, which is worse
+        // than showing nothing:
+        //   Disorderly Conduct   (L2, 4 days, 4 slots)
+        //   Dish It Out          (L6, 5 days, 5 slots)
+        //   Cleared for Takeoff  (L7, 6 days, 6 slots)
     };
 
     // Lookup from a normalized title to the canonical OC_DATA key, used by
