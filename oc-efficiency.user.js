@@ -138,12 +138,11 @@
         })() },
         'Break the Bank':           { days: 6, slots: 6, payout: [195135000, 395980000] },
         'Ship Happens':             { days: 5, slots: 5, items: [
-            // Single-item drop, assumed 1/3 each. These items post-date our
-            // item.json snapshot, so we don't have their ids yet; the wiki's
-            // Jewelry Store sell prices stand in as priceFallback.
-            { id: null, name: 'Ruby Brooch',           qty: [1, 1], weight: 1 / 3, priceFallback: 130_000_000 }, // TODO: item id
-            { id: null, name: 'Emerald Plastron',      qty: [1, 1], weight: 1 / 3, priceFallback: 70_000_000 },  // TODO: item id
-            { id: null, name: 'Alexandrite Manchette', qty: [1, 1], weight: 1 / 3, priceFallback: 30_000_000 },  // TODO: item id
+            // Single-item drop, assumed 1/3 each. Vendor-only (market price
+            // 0), so these value at their Jewelry Store sell price.
+            { id: 1554, name: 'Ruby Brooch',           qty: [1, 1], weight: 1 / 3 },
+            { id: 1556, name: 'Emerald Plastron',      qty: [1, 1], weight: 1 / 3 },
+            { id: 1555, name: 'Alexandrite Manchette', qty: [1, 1], weight: 1 / 3 },
         ] },
         'Clinical Precision':       { days: 4, slots: 4, payout: [61363000, 122565000] },
         'Stacking the Deck':        { days: 4, slots: 4, chainsTo: 'Ace in the Hole' },
@@ -151,9 +150,9 @@
         'Manifest Cruelty':         { days: 4, slots: 4, chainsTo: 'Gone Fission' },
         'Gone Fission':             { days: 5, slots: 5, chainsTo: 'Crane Reaction' },
         'Crane Reaction':           { days: 6, slots: 6, items: [
-            // Cesium-137 has no live market or sell price yet (too new),
-            // so we fall back to ASSUMPTIONS.cesium137FallbackValue until
-            // the item starts trading.
+            // Cesium-137 has no market price (as of 2026-11 the API gives a
+            // $500M sell price, which is used); ASSUMPTIONS.cesium137FallbackValue
+            // only applies if the API ever stops returning one.
             { id: 336, name: 'Cesium-137', qty: [1, 3], priceFallback: ASSUMPTIONS.cesium137FallbackValue },
         ] },
         'Lock Stock':               { days: 5, slots: 5, chainsTo: 'Hostile Takeover' },
