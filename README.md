@@ -2,7 +2,11 @@
 
 A userscript that adds a payout line to every Organized Crime 2.0 card on your faction's crimes page: your expected cut per slot, and what that works out to **per day** of planning, so you can tell which open slot is actually worth joining.
 
+![Daily payout line on two OC cards](docs/screenshots/crime-cards.png)
+
 Click the `?` on the line to see the full working: raw payout, faction cut, success chance, chain pool and per-slot share.
+
+![Expanded calculation breakdown](docs/screenshots/breakdown.png)
 
 ## How it calculates
 
@@ -14,6 +18,8 @@ Click the `?` on the line to see the full working: raw payout, faction cut, succ
 ## Settings
 
 The settings panel sits under the OC tabs. The same options are in the Tampermonkey menu:
+
+![Settings panel](docs/screenshots/settings.png)
 
 - **API key**: a public-access key is enough; it's only used to fetch item prices.
 - **Faction payout %**: the share your faction pays out to participants (default 90%).
