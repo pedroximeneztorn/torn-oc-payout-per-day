@@ -1,7 +1,7 @@
 // Tiny dev server: serves oc-efficiency.user.js with the @version line
-// rewritten to a localtime stamp on every request, so Tampermonkey treats
-// each "check for updates" as a fresh version and pulls the latest disk
-// content. No build step, no source mutation.
+// rewritten to <the script's own @version>.<localtime stamp> on every
+// request, so Tampermonkey treats each "check for updates" as a fresh
+// version and pulls the latest disk content. No build step, no source mutation.
 //
 // Usage:
 //   node serve-userscript.js
@@ -17,10 +17,12 @@ const path = require('path');
 const SCRIPT_PATH = path.join(__dirname, 'oc-efficiency.user.js');
 const PORT = 3541;
 
-function buildVersion(d = new Date()) {
+function buildVersion(base, d = new Date()) {
     const p = (n, w = 2) => String(n).padStart(w, '0');
     const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
-    return `0.0.1.${stamp}`;
+    // Appending a segment keeps dev builds just above the release they're
+    // based on, so a dev install never looks like a downgrade of it.
+    return `${base}.${stamp}`;
 }
 
 const server = http.createServer((req, res) => {
@@ -39,7 +41,8 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    const version = buildVersion();
+    const base = (src.match(/^\/\/ @version\s+(\S+)/m) || [])[1] || '0';
+    const version = buildVersion(base);
     const out = src.replace(/^(\/\/ @version\s+).+$/m, `$1${version}`);
 
     res.writeHead(200, {
